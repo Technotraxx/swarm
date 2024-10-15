@@ -2,7 +2,7 @@ import streamlit as st
 from firecrawl import FirecrawlApp
 from swarm import Agent
 from openai import OpenAI
-import validators  # Falls Sie die URL-Validierung nutzen möchten
+import validators  # Für die URL-Validierung
 
 # Streamlit App Layout
 st.set_page_config(
@@ -17,7 +17,7 @@ st.markdown("""
 Willkommen beim **Editorial Nachrichten Assistenten**! Geben Sie die URL eines Nachrichtenartikels ein, und unser Assistent erstellt für Sie ein umfassendes Editorial, indem er die Inhalte scrapt, analysiert, faktenprüft, zusammenfasst und bearbeitet.
 """)
 
-# Sidebar für API-Schlüssel Eingaben
+# Sidebar für API-Schlüssel Eingaben und Stil-Anweisungen
 st.sidebar.header("API-Konfiguration")
 
 firecrawl_api_key = st.sidebar.text_input(
@@ -102,25 +102,25 @@ def fact_check_content(content):
     return fact_check
 
 def summarize_content(content):
-    """Fasse den Nachrichteninhalt zusammen."""
+    """Fasse den Nachrichteninhalt zusammen in Text, Zitate und Tabelle."""
     summary = generate_completion(
         "Zusammenfasser",
-        "Erstelle eine prägnante Zusammenfassung des folgenden Nachrichtenartikels.",
+        "Erstelle eine prägnante Zusammenfassung des folgenden Nachrichtenartikels. Teile die Zusammenfassung in drei Teile auf: \n1. Zusammenfassung als Text \n2. Die wichtigsten Zitate mit Personen- oder Herkunftsangabe \n3. Die wichtigsten Fakten als kleine Tabelle.",
         content
     )
     if not summary:
         st.error("Inhalt konnte nicht zusammengefasst werden.")
     return summary
 
-def generate_editorial(analysis, fact_check, summary):
-    """Generiere ein Editorial basierend auf Analyse, Faktenprüfung und Zusammenfassung."""
-    if not all([analysis, fact_check, summary]):
+def generate_editorial(analysis, fact_check, summary, style_instructions):
+    """Generiere ein Editorial basierend auf Analyse, Faktenprüfung, Zusammenfassung und Stil-Anweisungen."""
+    if not all([analysis, fact_check, summary, style_instructions]):
         st.error("Es fehlen Komponenten zur Generierung des Editorials.")
         return None
     editorial = generate_completion(
         "Redakteur",
-        "Verfasse einen gut strukturierten Editorial-Artikel unter Verwendung der folgenden Analyse, Faktenprüfung und Zusammenfassung.",
-        f"Analyse: {analysis}\nFaktenprüfung: {fact_check}\nZusammenfassung: {summary}"
+        "Verfasse einen gut strukturierten Editorial-Artikel unter Verwendung der folgenden Analyse, Faktenprüfung, Zusammenfassung und Stil-Anweisungen.",
+        f"Analyse: {analysis}\nFaktenprüfung: {fact_check}\nZusammenfassung:\n{summary}\nStil-Anweisungen: {style_instructions}"
     )
     if not editorial:
         st.error("Editorial konnte nicht generiert werden.")
@@ -144,8 +144,8 @@ def handoff_to_summarizer():
     """Übergebe den Inhalt an den Zusammenfasser Agent."""
     return summarizer_agent
 
-def handoff_to_editor():
-    """Übergebe die analysierten und zusammengefassten Inhalte an den Redakteur Agent."""
+def handoff_to_editor(style_instructions):
+    """Übergebe die analysierten, faktengeprüften, zusammengefassten Inhalte und Stil-Anweisungen an den Redakteur Agent."""
     return editor_agent
 
 user_interface_agent = Agent(
@@ -186,7 +186,7 @@ summarizer_agent = Agent(
     name="Zusammenfasser Agent",
     instructions=(
         "Du bist ein Zusammenfasser Agent, beauftragt mit der Verdichtung des Nachrichteninhalts zu einer prägnanten Zusammenfassung. "
-        "Stelle sicher, dass die Zusammenfassung alle wesentlichen Punkte erfasst. Sei klar und bündig."
+        "Stelle sicher, dass die Zusammenfassung in drei Teile aufgeteilt ist: \n1. Zusammenfassung als Text \n2. Die wichtigsten Zitate mit Personen- oder Herkunftsangabe \n3. Die wichtigsten Fakten als kleine Tabelle. Sei klar und bündig."
     ),
     functions=[summarize_content, handoff_to_editor],
 )
@@ -195,14 +195,14 @@ editor_agent = Agent(
     name="Redakteur Agent",
     instructions=(
         "Du bist ein Redakteur Agent, verantwortlich für das Verfassen eines ausgefeilten Editorial-Artikels. "
-        "Nutze die Analyse, Faktenprüfung und Zusammenfassung, um ein kohärentes und ansprechendes Stück zu erstellen. "
+        "Nutze die Analyse, Faktenprüfung, Zusammenfassung und Stil-Anweisungen, um ein kohärentes und ansprechendes Stück zu erstellen. "
         "Stelle sicher, dass das Editorial gut strukturiert und fehlerfrei ist."
     ),
     functions=[generate_editorial],
 )
 
 # Definition des Arbeitsablaufs
-def run_agents(url):
+def run_agents(url, style_instructions, second_url=None):
     try:
         # Schritt 1: Website Scrapen
         scraped_content = scrape_website(url)
@@ -232,18 +232,57 @@ def run_agents(url):
             return None
         st.info("📝 Inhalt zusammengefasst.")
 
+        # Optional: Zweite Quelle scrapen und verarbeiten
+        if second_url:
+            st.markdown("---")
+            st.subheader("📎 Zweite Quelle hinzufügen")
+            st.info("Verarbeite die zweite Quelle...")
+
+            scraped_content_2 = scrape_website(second_url)
+            if not scraped_content_2:
+                st.error("🔴 Das Scrapen der zweiten Website ist fehlgeschlagen. Bitte überprüfen Sie die URL und versuchen Sie es erneut.")
+                return None
+            st.success("✅ Zweite Website erfolgreich gescrapt.")
+
+            analysis_2 = analyze_website_content(scraped_content_2)
+            if not analysis_2:
+                st.error("🔴 Inhalt der zweiten Quelle konnte nicht analysiert werden.")
+                return None
+            st.info("📝 Inhalt der zweiten Quelle analysiert.")
+
+            fact_check_2 = fact_check_content(scraped_content_2)
+            if not fact_check_2:
+                st.error("🔴 Inhalt der zweiten Quelle konnte nicht faktengeprüft werden.")
+                return None
+            st.info("🔍 Inhalt der zweiten Quelle faktengeprüft.")
+
+            summary_2 = summarize_content(scraped_content_2)
+            if not summary_2:
+                st.error("🔴 Inhalt der zweiten Quelle konnte nicht zusammengefasst werden.")
+                return None
+            st.info("📝 Inhalt der zweiten Quelle zusammengefasst.")
+
+            # Kombinieren der Analysen, Faktenprüfungen und Zusammenfassungen
+            combined_analysis = f"{analysis}\n\nZusätzliche Analyse der zweiten Quelle:\n{analysis_2}"
+            combined_fact_check = f"{fact_check}\n\nZusätzliche Faktenprüfung der zweiten Quelle:\n{fact_check_2}"
+            combined_summary = f"{summary}\n\nZusätzliche Zusammenfassung der zweiten Quelle:\n{summary_2}"
+        else:
+            combined_analysis = analysis
+            combined_fact_check = fact_check
+            combined_summary = summary
+
         # Schritt 5: Editorial Generieren
-        editorial = generate_editorial(analysis, fact_check, summary)
+        editorial = generate_editorial(combined_analysis, combined_fact_check, combined_summary, style_instructions)
         if not editorial:
             st.error("🔴 Editorial konnte nicht generiert werden.")
             return None
         st.success("📰 Editorial erfolgreich erstellt.")
 
         return {
-            "Analyse": analysis,
-            "Faktenprüfung": fact_check,
-            "Zusammenfassung": summary,
-            "Editorial": editorial  # **Achten Sie darauf, dass hier ein Komma steht, wenn noch weitere Elemente folgen**
+            "Analyse": combined_analysis,
+            "Faktenprüfung": combined_fact_check,
+            "Zusammenfassung": combined_summary,
+            "Editorial": editorial
         }
     except Exception as e:
         st.error(f"Ein unerwarteter Fehler ist aufgetreten: {str(e)}")
@@ -252,14 +291,22 @@ def run_agents(url):
 # Streamlit App Hauptoberfläche
 with st.form(key='news_form'):
     url = st.text_input("Geben Sie die URL des Nachrichtenartikels ein:", "")
+    style_instructions = st.text_input("Geben Sie Ihre Stil-Anweisungen für das Editorial ein:", "")
+    second_url = st.text_input("Geben Sie eine zweite URL für zusätzliche Informationen ein (optional):", "")
     submit_button = st.form_submit_button(label='Editorial Generieren')
 
 if submit_button:
     if not url:
         st.error("Bitte geben Sie eine gültige URL ein.")
+    elif not validators.url(url):
+        st.error("Die eingegebene URL ist ungültig. Bitte geben Sie eine korrekte URL ein.")
+    elif style_instructions.strip() == "":
+        st.error("Bitte geben Sie Ihre Stil-Anweisungen ein.")
+    elif second_url and not validators.url(second_url):
+        st.error("Die eingegebene zweite URL ist ungültig. Bitte geben Sie eine korrekte URL ein.")
     else:
         with st.spinner("Verarbeitung..."):
-            results = run_agents(url)
+            results = run_agents(url, style_instructions, second_url if second_url else None)
             if results:
                 st.subheader("🔍 Analyse")
                 st.write(results["Analyse"])
