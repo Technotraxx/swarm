@@ -27,7 +27,7 @@ swarm_client = Swarm()
 def scrape_website(url):
     """Scrape a website using Firecrawl."""
     scrape_status = app.scrape_url(url, params={'formats': ['markdown']})
-    return json.dumps(scrape_status)
+    return str(scrape_status)  # Convert to string instead of JSON
 
 def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
@@ -136,13 +136,13 @@ if hasattr(st.session_state, 'scraped_content'):
         
         with tab1:
             if "source1" in st.session_state.scraped_content:
-                st.json(st.session_state.scraped_content["source1"])
+                st.text(st.session_state.scraped_content["source1"])  # Use st.text instead of st.json
             else:
                 st.write("No content scraped for Source 1")
         
         with tab2:
             if "source2" in st.session_state.scraped_content:
-                st.json(st.session_state.scraped_content["source2"])
+                st.text(st.session_state.scraped_content["source2"])  # Use st.text instead of st.json
             else:
                 st.write("No content scraped for Source 2")
 
@@ -150,7 +150,7 @@ if hasattr(st.session_state, 'scraped_content'):
 st.header("2. Summarize the Article")
 if st.button("Summarize Article"):
     if hasattr(st.session_state, 'scraped_content'):
-        combined_content = json.dumps(st.session_state.scraped_content)
+        combined_content = "\n\n".join(st.session_state.scraped_content.values())  # Combine content as text
         response = swarm_client.run(agent=summarizer_agent, messages=[{"role": "user", "content": combined_content}])
         summary = response.messages[-1]["content"]
         st.session_state.summary = summary
