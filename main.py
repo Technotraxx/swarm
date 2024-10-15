@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import json
 from firecrawl import FirecrawlApp
 from swarm import Swarm, Agent
 import dotenv
@@ -14,20 +13,39 @@ st.sidebar.title("API Key Configuration")
 openai_api_key = st.sidebar.text_input("OpenAI API Key", type="password")
 firecrawl_api_key = st.sidebar.text_input("Firecrawl API Key", type="password")
 
-# Store API keys in environment variables
-os.environ["OPENAI_API_KEY"] = openai_api_key
-os.environ["FIRECRAWL_API_KEY"] = firecrawl_api_key
+# Store API keys in session state
+if 'openai_api_key' not in st.session_state:
+    st.session_state.openai_api_key = openai_api_key
+if 'firecrawl_api_key' not in st.session_state:
+    st.session_state.firecrawl_api_key = firecrawl_api_key
 
-# Initialize FirecrawlApp, OpenAI client, and Swarm client
-app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-swarm_client = Swarm()
+# Initialize clients only if API keys are provided
+@st.cache_resource
+def init_clients():
+    if not st.session_state.openai_api_key or not st.session_state.firecrawl_api_key:
+        st.error("Please provide both OpenAI and Firecrawl API keys in the sidebar.")
+        return None, None, None
+    
+    try:
+        app = FirecrawlApp(api_key=st.session_state.firecrawl_api_key)
+        client = OpenAI(api_key=st.session_state.openai_api_key)
+        swarm_client = Swarm()
+        return app, client, swarm_client
+    except Exception as e:
+        st.error(f"Error initializing clients: {str(e)}")
+        return None, None, None
 
-# Define functions
+app, client, swarm_client = init_clients()
+
+# Define function to scrape website directly using Firecrawl
 def scrape_website(url):
-    """Scrape a website using Firecrawl."""
-    scrape_status = app.scrape_url(url, params={'formats': ['markdown']})
-    return str(scrape_status)  # Convert to string instead of JSON
+    """Scrape a website using Firecrawl and return the raw response."""
+    try:
+        scrape_status = app.scrape_url(url, params={'formats': ['markdown']})
+        return scrape_status
+    except Exception as e:
+        st.error(f"Error scraping {url}: {str(e)}")
+        return None
 
 def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
@@ -116,33 +134,41 @@ url1 = st.text_input("Enter the first website URL to scrape")
 url2 = st.text_input("Enter the second website URL to scrape")
 
 if st.button("Scrape Websites"):
-    if url1 or url2:
+    if not app:
+        st.error("Please provide a valid Firecrawl API key before proceeding.")
+    elif url1 or url2:
         scraped_content = {}
         if url1:
-            response = swarm_client.run(agent=scraper_agent, messages=[{"role": "user", "content": url1}])
-            scraped_content["source1"] = response.messages[-1]["content"]
+            content1 = scrape_website(url1)
+            if content1:
+                scraped_content["source1"] = content1
         if url2:
-            response = swarm_client.run(agent=scraper_agent, messages=[{"role": "user", "content": url2}])
-            scraped_content["source2"] = response.messages[-1]["content"]
-        st.session_state.scraped_content = scraped_content
-        st.success("Websites scraped successfully!")
+            content2 = scrape_website(url2)
+            if content2:
+                scraped_content["source2"] = content2
+        
+        if scraped_content:
+            st.session_state.scraped_content = scraped_content
+            st.success("Websites scraped successfully!")
+        else:
+            st.error("Failed to scrape any content. Please check the URLs and try again.")
     else:
         st.error("Please enter at least one valid URL.")
 
-# Display scraped content in an expander with tabs
+# Display scraped content (if available)
 if hasattr(st.session_state, 'scraped_content'):
     with st.expander("View Scraped Content", expanded=True):
         tab1, tab2 = st.tabs(["Source 1", "Source 2"])
         
         with tab1:
             if "source1" in st.session_state.scraped_content:
-                st.text(st.session_state.scraped_content["source1"])  # Use st.text instead of st.json
+                st.json(st.session_state.scraped_content["source1"])
             else:
                 st.write("No content scraped for Source 1")
         
         with tab2:
             if "source2" in st.session_state.scraped_content:
-                st.text(st.session_state.scraped_content["source2"])  # Use st.text instead of st.json
+                st.json(st.session_state.scraped_content["source2"])
             else:
                 st.write("No content scraped for Source 2")
 
