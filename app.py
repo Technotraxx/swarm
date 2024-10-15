@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import json
 from firecrawl import FirecrawlApp
 from swarm import Swarm, Agent
 import dotenv
@@ -33,17 +34,28 @@ helpful_agent = Agent(
     instructions="You are a helpful agent.",
 )
 
-# Initialize or retrieve session state for conversation and responses
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "latest_response" not in st.session_state:
-    st.session_state.latest_response = ""
-if "agent" not in st.session_state:
-    st.session_state.agent = interactive_agent
-if "helpful_messages" not in st.session_state:
-    st.session_state.helpful_messages = []
-if "helpful_agent" not in st.session_state:
-    st.session_state.helpful_agent = helpful_agent
+def get_weather(location, time="now"):
+    """Get the current weather in a given location. Location MUST be a city."""
+    return json.dumps({"location": location, "temperature": "65", "time": time})
+
+def send_email(recipient, subject, body):
+    print("Sending email...")
+    print(f"To: {recipient}")
+    print(f"Subject: {subject}")
+    print(f"Body: {body}")
+    return "Sent!"
+
+weather_agent = Agent(
+    name="Weather Agent",
+    instructions="You are a helpful agent that provides weather information and can send emails.",
+    functions=[get_weather, send_email],
+)
+
+# Initialize session states for the new tab
+if "weather_messages" not in st.session_state:
+    st.session_state.weather_messages = []
+if "weather_agent" not in st.session_state:
+    st.session_state.weather_agent = weather_agent
 
 # Define functions for the marketing assistant tab
 def scrape_website(url):
@@ -90,7 +102,7 @@ def create_campaign_idea(target_audience, goals):
     return {"campaign_idea": campaign_idea}
 
 # Create tabs for different functionalities
-tab1, tab2, tab3 = st.tabs(["Marketing Assistant", "Interactive Agent", "Helpful Agent Loop"])
+tab1, tab2, tab3, tab4 = st.tabs(["Marketing Assistant", "Interactive Agent", "Helpful Agent Loop", "Weather Agent"])
 
 # Tab 1: Marketing Assistant
 with tab1:
@@ -208,3 +220,33 @@ with tab3:
 
     # Instructions for users
     st.info("Keep the conversation going by entering a message and pressing 'Send'. The agent will respond to each message in turn.")
+
+# Tab 4: Weather Agent
+with tab4:
+    st.title("Weather Agent")
+    st.write("Get weather information and send emails using the Weather Agent.")
+
+    # Input for getting weather information
+    location = st.text_input("Enter a city for weather information:")
+    time = st.text_input("Enter a time (e.g., 'now', 'tomorrow'):", value="now")
+
+    # Button to get weather information
+    if st.button("Get Weather"):
+        if location:
+            weather_response = get_weather(location, time)
+            st.json(json.loads(weather_response))
+        else:
+            st.error("Please enter a city.")
+
+    # Input for sending an email
+    recipient = st.text_input("Enter email recipient:")
+    subject = st.text_input("Enter email subject:")
+    body = st.text_area("Enter email body:")
+
+    # Button to send an email
+    if st.button("Send Email"):
+        if recipient and subject and body:
+            email_status = send_email(recipient, subject, body)
+            st.success(email_status)
+        else:
+            st.error("Please fill in all email fields.")
