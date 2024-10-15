@@ -1,7 +1,7 @@
 import streamlit as st
+from swarm import Swarm, Agent
 import os
 from firecrawl import FirecrawlApp
-from swarm import Swarm, Agent
 import dotenv
 from openai import OpenAI
 
@@ -17,16 +17,16 @@ firecrawl_api_key = st.sidebar.text_input("Firecrawl API Key", type="password")
 os.environ["OPENAI_API_KEY"] = openai_api_key
 os.environ["FIRECRAWL_API_KEY"] = firecrawl_api_key
 
-# Initialize FirecrawlApp and OpenAI client
-app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Initialize Swarm client and agent for the interactive tab
+# Initialize Swarm client and agent
 swarm_client = Swarm()
 interactive_agent = Agent(
     name="Interactive Agent",
     instructions="You are a helpful agent that assists users with refining their marketing brief iteratively. Provide feedback and suggestions based on user input.",
 )
+
+# Initialize FirecrawlApp and OpenAI client for the marketing assistant tab
+firecrawl_app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Initialize or retrieve session state for the interactive agent
 if "messages" not in st.session_state:
@@ -34,54 +34,7 @@ if "messages" not in st.session_state:
 if "agent" not in st.session_state:
     st.session_state.agent = interactive_agent
 
-# Define functions for the marketing assistant tab
-def scrape_website(url):
-    """Scrape a website using Firecrawl."""
-    scrape_status = app.scrape_url(
-        url,
-        params={'formats': ['markdown']}
-    )
-    return scrape_status
-
-def generate_completion(role, task, content):
-    """Generate a completion using OpenAI."""
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": f"You are a {role}. {task}"},
-            {"role": "user", "content": content}
-        ]
-    )
-    return response.choices[0].message.content
-
-def analyze_website_content(content):
-    """Analyze the scraped website content using OpenAI."""
-    analysis = generate_completion(
-        "marketing analyst",
-        "Analyze the following website content and provide key insights for marketing strategy.",
-        content
-    )
-    return {"analysis": analysis}
-
-def generate_copy(brief):
-    """Generate marketing copy based on a brief using OpenAI."""
-    copy = generate_completion(
-        "copywriter",
-        "Create compelling marketing copy based on the following brief.",
-        brief
-    )
-    return {"copy": copy}
-
-def create_campaign_idea(target_audience, goals):
-    """Create a campaign idea based on target audience and goals using OpenAI."""
-    campaign_idea = generate_completion(
-        "marketing strategist",
-        "Create an innovative campaign idea based on the target audience and goals provided.",
-        f"Target Audience: {target_audience}\nGoals: {goals}"
-    )
-    return {"campaign_idea": campaign_idea}
-
-# Set up tabs for different functionalities
+# Define tabs for different functionalities
 tab1, tab2 = st.tabs(["Marketing Assistant", "Interactive Agent"])
 
 # Tab 1: Marketing Assistant
@@ -95,7 +48,7 @@ with tab1:
     # Button to scrape the website
     if st.button("Scrape Website"):
         if url:
-            scrape_status = scrape_website(url)
+            scrape_status = firecrawl_app.scrape_url(url, params={'formats': ['markdown']})
             st.json(scrape_status)
         else:
             st.error("Please enter a valid URL.")
@@ -106,8 +59,14 @@ with tab1:
     # Button to analyze content
     if st.button("Analyze Website Content"):
         if website_content:
-            analysis = analyze_website_content(website_content)
-            st.json(analysis)
+            analysis = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a marketing analyst. Analyze the following website content and provide key insights for marketing strategy."},
+                    {"role": "user", "content": website_content}
+                ]
+            )
+            st.json({"analysis": analysis.choices[0].message.content})
         else:
             st.error("Please provide website content for analysis.")
 
@@ -117,8 +76,14 @@ with tab1:
     # Button to generate copy
     if st.button("Generate Marketing Copy"):
         if brief:
-            copy = generate_copy(brief)
-            st.json(copy)
+            copy = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a copywriter. Create compelling marketing copy based on the following brief."},
+                    {"role": "user", "content": brief}
+                ]
+            )
+            st.json({"copy": copy.choices[0].message.content})
         else:
             st.error("Please provide a brief.")
 
@@ -129,8 +94,14 @@ with tab1:
     # Button to create a campaign idea
     if st.button("Create Campaign Idea"):
         if target_audience and goals:
-            campaign_idea = create_campaign_idea(target_audience, goals)
-            st.json(campaign_idea)
+            campaign_idea = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a marketing strategist. Create an innovative campaign idea based on the target audience and goals provided."},
+                    {"role": "user", "content": f"Target Audience: {target_audience}\nGoals: {goals}"}
+                ]
+            )
+            st.json({"campaign_idea": campaign_idea.choices[0].message.content})
         else:
             st.error("Please provide both target audience and goals.")
 
@@ -156,7 +127,4 @@ with tab2:
     st.write("### Conversation History:")
     for message in st.session_state.messages:
         if message["content"]:
-            st.write(f"**{message['role'].capitalize()}**: {message['content']}")
-
-    # Instructions for users
-    st.info("Enter your brief and click 'Submit' to refine it iteratively. Adjust your input based on the agent's feedback until you are satisfied.")
+       
