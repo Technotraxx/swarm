@@ -22,10 +22,15 @@ app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 swarm_client = Swarm()
 
-# Define the main interactive agent
+# Define agents for various tasks
 interactive_agent = Agent(
     name="Interactive Agent",
     instructions="You are a helpful agent that assists users with refining their marketing brief iteratively. Provide feedback and suggestions based on user input.",
+)
+
+helpful_agent = Agent(
+    name="Helpful Agent",
+    instructions="You are a helpful agent.",
 )
 
 # Initialize or retrieve session state for conversation and responses
@@ -35,6 +40,10 @@ if "latest_response" not in st.session_state:
     st.session_state.latest_response = ""
 if "agent" not in st.session_state:
     st.session_state.agent = interactive_agent
+if "helpful_messages" not in st.session_state:
+    st.session_state.helpful_messages = []
+if "helpful_agent" not in st.session_state:
+    st.session_state.helpful_agent = helpful_agent
 
 # Define functions for the marketing assistant tab
 def scrape_website(url):
@@ -81,7 +90,7 @@ def create_campaign_idea(target_audience, goals):
     return {"campaign_idea": campaign_idea}
 
 # Create tabs for different functionalities
-tab1, tab2 = st.tabs(["Marketing Assistant", "Interactive Agent"])
+tab1, tab2, tab3 = st.tabs(["Marketing Assistant", "Interactive Agent", "Helpful Agent Loop"])
 
 # Tab 1: Marketing Assistant
 with tab1:
@@ -176,5 +185,26 @@ with tab2:
             st.session_state.messages = response.messages
             st.session_state.latest_response = response.messages[-1]["content"]
 
+# Tab 3: Helpful Agent Loop
+with tab3:
+    st.title("Helpful Agent Loop")
+    st.write("Engage in a continuous conversation with the helpful agent.")
+
+    # Input text area for user input
+    loop_user_input = st.text_input("Enter your message:")
+
+    # Button to submit input and interact with the helpful agent
+    if st.button("Send", key="loop_submit") and loop_user_input:
+        st.session_state.helpful_messages.append({"role": "user", "content": loop_user_input})
+        response = swarm_client.run(agent=st.session_state.helpful_agent, messages=st.session_state.helpful_messages)
+        st.session_state.helpful_messages = response.messages
+        st.session_state.helpful_agent = response.agent
+
+    # Display the conversation history
+    st.write("### Conversation History:")
+    for message in st.session_state.helpful_messages:
+        if message["content"]:
+            st.write(f"**{message['role'].capitalize()}**: {message['content']}")
+
     # Instructions for users
-    st.info("Use the predefined buttons to refine your brief iteratively. Adjust your input based on the agent’s feedback until you are satisfied.")
+    st.info("Keep the conversation going by entering a message and pressing 'Send'. The agent will respond to each message in turn.")
