@@ -5,269 +5,249 @@ from openai import OpenAI
 
 # Streamlit App Layout
 st.set_page_config(
-    page_title="Editorial News Assistant",
+    page_title="Editorial Nachrichten Assistent",
     page_icon="📰",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("📰 Editorial News Assistant")
+st.title("📰 Editorial Nachrichten Assistent")
 st.markdown("""
-Welcome to the **Editorial News Assistant**! Enter the URL of a news article, and our assistant will generate a comprehensive editorial piece for you by scraping, analyzing, fact-checking, summarizing, and editing the content.
+Willkommen beim **Editorial Nachrichten Assistenten**! Geben Sie die URL eines Nachrichtenartikels ein, und unser Assistent erstellt für Sie ein umfassendes Editorial, indem er die Inhalte scrapt, analysiert, faktenprüft, zusammenfasst und bearbeitet.
 """)
 
-# Sidebar for API Key Inputs
-st.sidebar.header("API Configuration")
+# Sidebar für API-Schlüssel Eingaben
+st.sidebar.header("API-Konfiguration")
 
 firecrawl_api_key = st.sidebar.text_input(
-    "Firecrawl API Key",
+    "Firecrawl API-Schlüssel",
     type="password",
-    help="Enter your Firecrawl API key here."
+    help="Geben Sie hier Ihren Firecrawl API-Schlüssel ein."
 )
 
 openai_api_key = st.sidebar.text_input(
-    "OpenAI API Key",
+    "OpenAI API-Schlüssel",
     type="password",
-    help="Enter your OpenAI API key here."
+    help="Geben Sie hier Ihren OpenAI API-Schlüssel ein."
 )
 
-# Initialize FirecrawlApp and OpenAI only if API keys are provided
+# Initialisierung von FirecrawlApp und OpenAI nur wenn API-Schlüssel bereitgestellt werden
 if firecrawl_api_key and openai_api_key:
     try:
         app = FirecrawlApp(api_key=firecrawl_api_key)
         client = OpenAI(api_key=openai_api_key)
     except Exception as e:
-        st.sidebar.error(f"Failed to initialize APIs: {str(e)}")
+        st.sidebar.error(f"Fehler bei der Initialisierung der APIs: {str(e)}")
         st.stop()
 else:
-    st.sidebar.warning("Please enter both Firecrawl and OpenAI API keys to proceed.")
+    st.sidebar.warning("Bitte geben Sie sowohl den Firecrawl- als auch den OpenAI-API-Schlüssel ein, um fortzufahren.")
     st.stop()
 
 def scrape_website(url):
-    """Scrape a website using Firecrawl."""
+    """Eine Website mit Firecrawl scrapen."""
     try:
         scrape_response = app.scrape_url(
             url,
             params={'formats': ['markdown']}
         )
-        st.write("🔍 Scrape Response:", scrape_response)  # Debugging statement
+        st.write("🔍 Scrape-Antwort:", scrape_response)  # Debugging-Anweisung
 
-        # Check if 'markdown' exists in the response
+        # Überprüfen ob 'markdown' im Antwort enthält
         if isinstance(scrape_response, dict) and 'markdown' in scrape_response:
             return scrape_response['markdown']
         else:
-            raise KeyError("Neither 'markdown' nor 'content' keys are present in the scrape response.")
+            raise KeyError("Weder der Schlüssel 'markdown' noch 'content' sind in der Scrape-Antwort vorhanden.")
     
     except Exception as e:
-        st.error(f"An error occurred during scraping: {str(e)}")
+        st.error(f"Ein Fehler ist beim Scrapen aufgetreten: {str(e)}")
         return None
 
 def generate_completion(role, task, content):
-    """Generate a completion using OpenAI."""
+    """Generiere eine Vervollständigung mit OpenAI."""
     try:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": f"You are a {role}. {task}"},
+                {"role": "system", "content": f"Du bist ein {role}. {task}"},
                 {"role": "user", "content": content}
             ]
         )
         completion = response.choices[0].message.content.strip()
         return completion
     except Exception as e:
-        st.error(f"An error occurred while generating completion: {str(e)}")
+        st.error(f"Ein Fehler ist bei der Generierung der Vervollständigung aufgetreten: {str(e)}")
         return None
 
 def analyze_website_content(content):
-    """Analyze the scraped website content for key insights."""
+    """Analysiere den gescrapten Website-Inhalt für wichtige Erkenntnisse."""
     analysis = generate_completion(
-        "content analyst",
-        "Analyze the following news content and provide key insights, including relevance, significance, and potential impact.",
+        "Inhaltsanalyst",
+        "Analysiere den folgenden Nachrichteninhalt und gib wichtige Erkenntnisse, einschließlich Relevanz, Bedeutung und potenzieller Auswirkungen.",
         content
     )
     if not analysis:
-        st.error("Failed to analyze content.")
+        st.error("Inhalt konnte nicht analysiert werden.")
     return analysis
 
 def fact_check_content(content):
-    """Fact-check the provided content."""
+    """Faktenprüfe den bereitgestellten Inhalt."""
     fact_check = generate_completion(
-        "fact checker",
-        "Verify the factual accuracy of the following news content. Highlight any discrepancies or confirm the validity of the information.",
+        "Faktenprüfer",
+        "Überprüfe die faktische Genauigkeit des folgenden Nachrichteninhalts. Hebe eventuelle Unstimmigkeiten hervor oder bestätige die Gültigkeit der Informationen.",
         content
     )
     if not fact_check:
-        st.error("Failed to fact-check content.")
+        st.error("Inhalt konnte nicht faktengeprüft werden.")
     return fact_check
 
 def summarize_content(content):
-    """Summarize the news content."""
+    """Fasse den Nachrichteninhalt zusammen."""
     summary = generate_completion(
-        "summarizer",
-        "Provide a concise summary of the following news article.",
+        "Zusammenfasser",
+        "Erstelle eine prägnante Zusammenfassung des folgenden Nachrichtenartikels.",
         content
     )
     if not summary:
-        st.error("Failed to summarize content.")
+        st.error("Inhalt konnte nicht zusammengefasst werden.")
     return summary
 
 def generate_editorial(analysis, fact_check, summary):
-    """Generate an editorial piece based on analysis, fact-check, and summary."""
+    """Generiere ein Editorial basierend auf Analyse, Faktenprüfung und Zusammenfassung."""
     if not all([analysis, fact_check, summary]):
-        st.error("Missing components for editorial generation.")
+        st.error("Es fehlen Komponenten zur Generierung des Editorials.")
         return None
     editorial = generate_completion(
-        "editor",
-        "Compose a well-structured editorial article using the following analysis, fact-check results, and summary.",
-        f"Analysis: {analysis}\nFact Check: {fact_check}\nSummary: {summary}"
+        "Redakteur",
+        "Verfasse einen gut strukturierten Editorial-Artikel unter Verwendung der folgenden Analyse, Faktenprüfung und Zusammenfassung.",
+        f"Analyse: {analysis}\nFaktenprüfung: {fact_check}\nZusammenfassung: {summary}"
     )
     if not editorial:
-        st.error("Failed to generate editorial.")
+        st.error("Editorial konnte nicht generiert werden.")
     return editorial
 
-# Define Agents
+# Definition der Agenten
 
 def handoff_to_scraper():
-    """Hand off the URL to the website scraper agent."""
+    """Übergebe die URL an den Website Scraper Agent."""
     return website_scraper_agent
 
 def handoff_to_analyzer():
-    """Hand off the scraped content to the content analyzer agent."""
+    """Übergebe den gescrapten Inhalt an den Content Analyzer Agent."""
     return content_analyzer_agent
 
 def handoff_to_fact_checker():
-    """Hand off the content to the fact checker agent."""
+    """Übergebe den Inhalt an den Faktenprüfer Agent."""
     return fact_checker_agent
 
 def handoff_to_summarizer():
-    """Hand off the content to the summarizer agent."""
+    """Übergebe den Inhalt an den Zusammenfasser Agent."""
     return summarizer_agent
 
 def handoff_to_editor():
-    """Hand off the analyzed and summarized content to the editor agent."""
+    """Übergebe die analysierten und zusammengefassten Inhalte an den Redakteur Agent."""
     return editor_agent
 
 user_interface_agent = Agent(
-    name="User Interface Agent",
+    name="Benutzeroberflächen-Agent",
     instructions=(
-        "You are a user interface agent that manages interactions with the user. "
-        "Begin by requesting a URL of a news website that the user wants to create an editorial for. "
-        "Ask any necessary clarification questions. Be clear and concise."
+        "Du bist ein Benutzeroberflächen-Agent, der die Interaktionen mit dem Benutzer verwaltet. "
+        "Beginne damit, nach einer URL einer Nachrichtenwebsite zu fragen, für die der Benutzer ein Editorial erstellen möchte. "
+        "Stelle bei Bedarf Klärungsfragen. Sei klar und prägnant."
     ),
     functions=[handoff_to_scraper],
 )
 
 website_scraper_agent = Agent(
     name="Website Scraper Agent",
-    instructions="You are a website scraper agent specialized in extracting content from news websites.",
+    instructions="Du bist ein Website Scraper Agent, spezialisiert auf das Extrahieren von Inhalten aus Nachrichtenwebsites.",
     functions=[scrape_website, handoff_to_analyzer],
 )
 
 content_analyzer_agent = Agent(
-    name="Content Analyzer Agent",
+    name="Inhaltsanalyst Agent",
     instructions=(
-        "You are a content analyzer agent that examines scraped news content for key insights and relevance. "
-        "Provide a thorough analysis to aid in editorial creation. Be concise."
+        "Du bist ein Inhaltsanalyst Agent, der gescrapten Nachrichteninhalt auf wichtige Erkenntnisse und Relevanz untersucht. "
+        "Biete eine gründliche Analyse zur Unterstützung der Editorial-Erstellung. Sei prägnant."
     ),
     functions=[analyze_website_content, handoff_to_fact_checker],
 )
 
 fact_checker_agent = Agent(
-    name="Fact Checker Agent",
+    name="Faktenprüfer Agent",
     instructions=(
-        "You are a fact checker agent responsible for verifying the accuracy of the news content. "
-        "Identify and highlight any discrepancies or confirm the validity of the information. Be precise."
+        "Du bist ein Faktenprüfer Agent, verantwortlich für die Überprüfung der Genauigkeit des Nachrichteninhalts. "
+        "Identifiziere und hebe eventuelle Unstimmigkeiten hervor oder bestätige die Gültigkeit der Informationen. Sei präzise."
     ),
     functions=[fact_check_content, handoff_to_summarizer],
 )
 
 summarizer_agent = Agent(
-    name="Summarizer Agent",
+    name="Zusammenfasser Agent",
     instructions=(
-        "You are a summarizer agent tasked with condensing the news content into a concise summary. "
-        "Ensure that the summary captures all essential points. Be clear and succinct."
+        "Du bist ein Zusammenfasser Agent, beauftragt mit der Verdichtung des Nachrichteninhalts zu einer prägnanten Zusammenfassung. "
+        "Stelle sicher, dass die Zusammenfassung alle wesentlichen Punkte erfasst. Sei klar und bündig."
     ),
     functions=[summarize_content, handoff_to_editor],
 )
 
 editor_agent = Agent(
-    name="Editor Agent",
+    name="Redakteur Agent",
     instructions=(
-        "You are an editor agent responsible for composing a polished editorial article. "
-        "Utilize the analysis, fact-check results, and summary to create a coherent and engaging piece. "
-        "Ensure the editorial is well-structured and free of errors."
+        "Du bist ein Redakteur Agent, verantwortlich für das Verfassen eines ausgefeilten Editorial-Artikels. "
+        "Nutze die Analyse, Faktenprüfung und Zusammenfassung, um ein kohärentes und ansprechendes Stück zu erstellen. "
+        "Stelle sicher, dass das Editorial gut strukturiert und fehlerfrei ist."
     ),
     functions=[generate_editorial],
 )
 
-# Define the workflow execution
+# Definition des Arbeitsablaufs
 def run_agents(url):
     try:
-        # Step 1: Scrape Website
+        # Schritt 1: Website Scrapen
         scraped_content = scrape_website(url)
         if not scraped_content:
-            st.error("🔴 Failed to scrape the website. Please check the URL and try again.")
+            st.error("🔴 Das Scrapen der Website ist fehlgeschlagen. Bitte überprüfen Sie die URL und versuchen Sie es erneut.")
             return None
-        st.success("✅ Website scraped successfully.")
+        st.success("✅ Website erfolgreich gescrapt.")
 
-        # Step 2: Analyze Content
+        # Schritt 2: Inhalt Analysieren
         analysis = analyze_website_content(scraped_content)
         if not analysis:
-            st.error("🔴 Failed to analyze content.")
+            st.error("🔴 Inhalt konnte nicht analysiert werden.")
             return None
-        st.info("📝 Content analyzed.")
+        st.info("📝 Inhalt analysiert.")
 
-        # Step 3: Fact Check
+        # Schritt 3: Faktenprüfen
         fact_check = fact_check_content(scraped_content)
         if not fact_check:
-            st.error("🔴 Failed to fact-check content.")
+            st.error("🔴 Inhalt konnte nicht faktengeprüft werden.")
             return None
-        st.info("🔍 Fact-checked the content.")
+        st.info("🔍 Inhalt faktengeprüft.")
 
-        # Step 4: Summarize
+        # Schritt 4: Zusammenfassen
         summary = summarize_content(scraped_content)
         if not summary:
-            st.error("🔴 Failed to summarize content.")
+            st.error("🔴 Inhalt konnte nicht zusammengefasst werden.")
             return None
-        st.info("📝 Content summarized.")
+        st.info("📝 Inhalt zusammengefasst.")
 
-        # Step 5: Generate Editorial
+        # Schritt 5: Editorial Generieren
         editorial = generate_editorial(analysis, fact_check, summary)
         if not editorial:
-            st.error("🔴 Failed to generate editorial.")
+            st.error("🔴 Editorial konnte nicht generiert werden.")
             return None
-        st.success("📰 Editorial generated successfully.")
+        st.success("📰 Editorial erfolgreich erstellt.")
 
         return {
-            "Analysis": analysis,
-            "Fact Check": fact_check,
-            "Summary": summary,
+            "Analyse": analysis,
+            "Faktenprüfung": fact_check,
+            "Zusammenfassung": summary,
             "Editorial": editorial
         }
     except Exception as e:
-        st.error(f"An unexpected error occurred: {str(e)}")
+        st.error(f"Ein unerwarteter Fehler ist aufgetreten: {str(e)}")
         return None
 
-# Streamlit App Main Interface
+# Streamlit App Hauptoberfläche
 with st.form(key='news_form'):
-    url = st.text_input("Enter News Article URL:", "")
-    submit_button = st.form_submit_button(label='Generate Editorial')
-
-if submit_button:
-    if not url:
-        st.error("Please enter a valid URL.")
-    else:
-        with st.spinner("Processing..."):
-            results = run_agents(url)
-            if results:
-                st.subheader("🔍 Analysis")
-                st.write(results["Analysis"])
-
-                st.subheader("🔍 Fact Check")
-                st.write(results["Fact Check"])
-
-                st.subheader("📝 Summary")
-                st.write(results["Summary"])
-
-                st.subheader("📰 Editorial")
-                st.write(results["Editorial"])
+    u
