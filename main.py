@@ -27,7 +27,7 @@ swarm_client = Swarm()
 def scrape_website(url):
     """Scrape a website using Firecrawl."""
     scrape_status = app.scrape_url(url, params={'formats': ['markdown']})
-    return scrape_status
+    return json.dumps(scrape_status)
 
 def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
@@ -120,10 +120,10 @@ if st.button("Scrape Websites"):
         scraped_content = {}
         if url1:
             response = swarm_client.run(agent=scraper_agent, messages=[{"role": "user", "content": url1}])
-            scraped_content["source1"] = response.content
+            scraped_content["source1"] = response.messages[-1]["content"]
         if url2:
             response = swarm_client.run(agent=scraper_agent, messages=[{"role": "user", "content": url2}])
-            scraped_content["source2"] = response.content
+            scraped_content["source2"] = response.messages[-1]["content"]
         st.session_state.scraped_content = scraped_content
         st.success("Websites scraped successfully!")
     else:
@@ -152,7 +152,7 @@ if st.button("Summarize Article"):
     if hasattr(st.session_state, 'scraped_content'):
         combined_content = json.dumps(st.session_state.scraped_content)
         response = swarm_client.run(agent=summarizer_agent, messages=[{"role": "user", "content": combined_content}])
-        summary = response.content
+        summary = response.messages[-1]["content"]
         st.session_state.summary = summary
         st.markdown(summary)
     else:
@@ -163,7 +163,7 @@ st.header("3. Generate Article Idea")
 if st.button("Generate Idea"):
     if hasattr(st.session_state, 'summary'):
         response = swarm_client.run(agent=idea_generator_agent, messages=[{"role": "user", "content": st.session_state.summary}])
-        idea = response.content
+        idea = response.messages[-1]["content"]
         st.session_state.idea = idea
         st.write(idea)
     else:
@@ -192,7 +192,7 @@ if st.button("Generate Style Suggestions"):
                 "content": f"Original Article: {st.session_state.scraped_content}\nNew Idea: {st.session_state.idea}\nTarget Audience: {target_audience}\nGoals: {goals}"
             }]
         )
-        style_suggestions = response.content
+        style_suggestions = response.messages[-1]["content"]
         st.session_state.style_suggestions = style_suggestions
         st.write(style_suggestions)
     else:
@@ -209,7 +209,7 @@ if st.button("Generate New Article"):
                 "content": f"Original Article: {st.session_state.scraped_content}\nNew Idea: {st.session_state.idea}\nTarget Audience: {target_audience}\nGoals: {goals}\nStyle Suggestions: {st.session_state.style_suggestions}\nCustom Instructions: {custom_instructions}"
             }]
         )
-        new_article = response.content
+        new_article = response.messages[-1]["content"]
         st.markdown(new_article)
     else:
         st.error("Please complete all previous steps first.")
