@@ -57,6 +57,18 @@ def generate_completion(role, task, content):
     )
     return response.choices[0].message.content
 
+def extract_text_from_firecrawl_response(response):
+    """Extract the text content from a Firecrawl API response."""
+    if isinstance(response, dict):
+        # Assuming the response has a 'text' or 'content' field
+        return response.get('text', '') or response.get('content', '')
+    elif isinstance(response, str):
+        # If it's already a string, return it as is
+        return response
+    else:
+        # If it's neither a dict nor a string, convert it to a string
+        return str(response)
+
 def summarize_article(content):
     """Summarize the scraped article content using OpenAI."""
     summary = generate_completion(
@@ -176,7 +188,16 @@ if hasattr(st.session_state, 'scraped_content'):
 st.header("2. Summarize the Article")
 if st.button("Summarize Article"):
     if hasattr(st.session_state, 'scraped_content'):
-        combined_content = "\n\n".join(st.session_state.scraped_content.values())  # Combine content as text
+        # Extract text content from each source
+        extracted_contents = []
+        for source, content in st.session_state.scraped_content.items():
+            extracted_text = extract_text_from_firecrawl_response(content)
+            extracted_contents.append(f"Source: {source}\n\n{extracted_text}")
+        
+        # Combine extracted contents
+        combined_content = "\n\n---\n\n".join(extracted_contents)
+        
+        # Summarize using the summarizer agent
         response = swarm_client.run(agent=summarizer_agent, messages=[{"role": "user", "content": combined_content}])
         summary = response.messages[-1]["content"]
         st.session_state.summary = summary
