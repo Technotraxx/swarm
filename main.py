@@ -2,6 +2,7 @@ import streamlit as st
 from firecrawl import FirecrawlApp
 from swarm import Agent
 from openai import OpenAI
+import validators  # Falls Sie die URL-Validierung nutzen möchten
 
 # Streamlit App Layout
 st.set_page_config(
@@ -57,7 +58,7 @@ def scrape_website(url):
             return scrape_response['markdown']
         else:
             raise KeyError("Weder der Schlüssel 'markdown' noch 'content' sind in der Scrape-Antwort vorhanden.")
-    
+
     except Exception as e:
         st.error(f"Ein Fehler ist beim Scrapen aufgetreten: {str(e)}")
         return None
@@ -66,7 +67,7 @@ def generate_completion(role, task, content):
     """Generiere eine Vervollständigung mit OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4",  # Stellen Sie sicher, dass der Modellname korrekt ist
             messages=[
                 {"role": "system", "content": f"Du bist ein {role}. {task}"},
                 {"role": "user", "content": content}
@@ -242,7 +243,7 @@ def run_agents(url):
             "Analyse": analysis,
             "Faktenprüfung": fact_check,
             "Zusammenfassung": summary,
-            "Editorial": editorial
+            "Editorial": editorial  # **Achten Sie darauf, dass hier ein Komma steht, wenn noch weitere Elemente folgen**
         }
     except Exception as e:
         st.error(f"Ein unerwarteter Fehler ist aufgetreten: {str(e)}")
@@ -250,4 +251,24 @@ def run_agents(url):
 
 # Streamlit App Hauptoberfläche
 with st.form(key='news_form'):
-    u
+    url = st.text_input("Geben Sie die URL des Nachrichtenartikels ein:", "")
+    submit_button = st.form_submit_button(label='Editorial Generieren')
+
+if submit_button:
+    if not url:
+        st.error("Bitte geben Sie eine gültige URL ein.")
+    else:
+        with st.spinner("Verarbeitung..."):
+            results = run_agents(url)
+            if results:
+                st.subheader("🔍 Analyse")
+                st.write(results["Analyse"])
+
+                st.subheader("🔍 Faktenprüfung")
+                st.write(results["Faktenprüfung"])
+
+                st.subheader("📝 Zusammenfassung")
+                st.write(results["Zusammenfassung"])
+
+                st.subheader("📰 Editorial")
+                st.write(results["Editorial"])
