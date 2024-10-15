@@ -33,32 +33,48 @@ openai_api_key = st.sidebar.text_input(
 
 # Initialize FirecrawlApp and OpenAI only if API keys are provided
 if firecrawl_api_key and openai_api_key:
-    app = FirecrawlApp(api_key=firecrawl_api_key)
-    client = OpenAI(api_key=openai_api_key)
+    try:
+        app = FirecrawlApp(api_key=firecrawl_api_key)
+        client = OpenAI(api_key=openai_api_key)
+    except Exception as e:
+        st.sidebar.error(f"Failed to initialize APIs: {str(e)}")
+        st.stop()
 else:
     st.sidebar.warning("Please enter both Firecrawl and OpenAI API keys to proceed.")
     st.stop()
 
 def scrape_website(url):
     """Scrape a website using Firecrawl."""
-    scrape_status = app.scrape_url(
-        url,
-        params={'formats': ['markdown']}
-    )
-    if scrape_status['status'] != 'success':
-        raise Exception(f"Scraping failed: {scrape_status.get('error', 'Unknown error')}")
-    return scrape_status['content']
+    try:
+        scrape_status = app.scrape_url(
+            url,
+            params={'formats': ['markdown']}
+        )
+        st.write("🔍 Scrape Status Response:", scrape_status)  # Debugging statement
+        if 'status' not in scrape_status:
+            raise KeyError("'status' key is missing in the scrape response.")
+        if scrape_status['status'] != 'success':
+            raise Exception(f"Scraping failed: {scrape_status.get('error', 'Unknown error')}")
+        return scrape_status['content']
+    except Exception as e:
+        st.error(f"An error occurred during scraping: {str(e)}")
+        return None
 
 def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": f"You are a {role}. {task}"},
-            {"role": "user", "content": content}
-        ]
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": f"You are a {role}. {task}"},
+                {"role": "user", "content": content}
+            ]
+        )
+        completion = response.choices[0].message.content.strip()
+        return completion
+    except Exception as e:
+        st.error(f"An error occurred while generating completion: {str(e)}")
+        return None
 
 def analyze_website_content(content):
     """Analyze the scraped website content for key insights."""
@@ -67,6 +83,8 @@ def analyze_website_content(content):
         "Analyze the following news content and provide key insights, including relevance, significance, and potential impact.",
         content
     )
+    if not analysis:
+        st.error("Failed to analyze content.")
     return analysis
 
 def fact_check_content(content):
@@ -76,6 +94,8 @@ def fact_check_content(content):
         "Verify the factual accuracy of the following news content. Highlight any discrepancies or confirm the validity of the information.",
         content
     )
+    if not fact_check:
+        st.error("Failed to fact-check content.")
     return fact_check
 
 def summarize_content(content):
@@ -85,15 +105,22 @@ def summarize_content(content):
         "Provide a concise summary of the following news article.",
         content
     )
+    if not summary:
+        st.error("Failed to summarize content.")
     return summary
 
 def generate_editorial(analysis, fact_check, summary):
     """Generate an editorial piece based on analysis, fact-check, and summary."""
+    if not all([analysis, fact_check, summary]):
+        st.error("Missing components for editorial generation.")
+        return None
     editorial = generate_completion(
         "editor",
         "Compose a well-structured editorial article using the following analysis, fact-check results, and summary.",
         f"Analysis: {analysis}\nFact Check: {fact_check}\nSummary: {summary}"
     )
+    if not editorial:
+        st.error("Failed to generate editorial.")
     return editorial
 
 # Define Agents
@@ -176,22 +203,37 @@ def run_agents(url):
     try:
         # Step 1: Scrape Website
         scraped_content = scrape_website(url)
+        if not scraped_content:
+            st.error("🔴 Failed to scrape the website. Please check the URL and try again.")
+            return None
         st.success("✅ Website scraped successfully.")
 
         # Step 2: Analyze Content
         analysis = analyze_website_content(scraped_content)
+        if not analysis:
+            st.error("🔴 Failed to analyze content.")
+            return None
         st.info("📝 Content analyzed.")
 
         # Step 3: Fact Check
         fact_check = fact_check_content(scraped_content)
+        if not fact_check:
+            st.error("🔴 Failed to fact-check content.")
+            return None
         st.info("🔍 Fact-checked the content.")
 
         # Step 4: Summarize
         summary = summarize_content(scraped_content)
+        if not summary:
+            st.error("🔴 Failed to summarize content.")
+            return None
         st.info("📝 Content summarized.")
 
         # Step 5: Generate Editorial
         editorial = generate_editorial(analysis, fact_check, summary)
+        if not editorial:
+            st.error("🔴 Failed to generate editorial.")
+            return None
         st.success("📰 Editorial generated successfully.")
 
         return {
@@ -201,7 +243,7 @@ def run_agents(url):
             "Editorial": editorial
         }
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+        st.error(f"An unexpected error occurred: {str(e)}")
         return None
 
 # Streamlit App Main Interface
