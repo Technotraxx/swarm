@@ -1,9 +1,7 @@
-# Streamlit App for Firecrawl and OpenAI Integration
 import streamlit as st
 import os
 from firecrawl import FirecrawlApp
-from swarm import Agent
-from swarm.repl import run_demo_loop
+from swarm import Swarm, Agent
 import dotenv
 from openai import OpenAI
 
@@ -19,10 +17,24 @@ firecrawl_api_key = st.sidebar.text_input("Firecrawl API Key", type="password")
 os.environ["OPENAI_API_KEY"] = openai_api_key
 os.environ["FIRECRAWL_API_KEY"] = firecrawl_api_key
 
-# Initialize FirecrawlApp and OpenAI
+# Initialize FirecrawlApp and OpenAI client
 app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Initialize Swarm client and agent for the interactive tab
+swarm_client = Swarm()
+interactive_agent = Agent(
+    name="Interactive Agent",
+    instructions="You are a helpful agent that assists users with refining their marketing brief iteratively. Provide feedback and suggestions based on user input.",
+)
+
+# Initialize or retrieve session state for the interactive agent
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "agent" not in st.session_state:
+    st.session_state.agent = interactive_agent
+
+# Define functions for the marketing assistant tab
 def scrape_website(url):
     """Scrape a website using Firecrawl."""
     scrape_status = app.scrape_url(
@@ -69,55 +81,82 @@ def create_campaign_idea(target_audience, goals):
     )
     return {"campaign_idea": campaign_idea}
 
-# Streamlit user interface
-st.title("Firecrawl and OpenAI Marketing Assistant")
+# Set up tabs for different functionalities
+tab1, tab2 = st.tabs(["Marketing Assistant", "Interactive Agent"])
 
-# Input for the website URL
-url = st.text_input("Enter the website URL to scrape")
+# Tab 1: Marketing Assistant
+with tab1:
+    st.title("Firecrawl and OpenAI Marketing Assistant")
+    st.write("Analyze websites and generate marketing strategies with ease.")
 
-# Button to scrape the website
-if st.button("Scrape Website"):
-    if url:
-        scrape_status = scrape_website(url)
-        st.json(scrape_status)
-    else:
-        st.error("Please enter a valid URL.")
+    # Input for the website URL
+    url = st.text_input("Enter the website URL to scrape")
 
-# Input for analyzing website content
-website_content = st.text_area("Enter scraped website content for analysis")
+    # Button to scrape the website
+    if st.button("Scrape Website"):
+        if url:
+            scrape_status = scrape_website(url)
+            st.json(scrape_status)
+        else:
+            st.error("Please enter a valid URL.")
 
-# Button to analyze content
-if st.button("Analyze Website Content"):
-    if website_content:
-        analysis = analyze_website_content(website_content)
-        st.json(analysis)
-    else:
-        st.error("Please provide website content for analysis.")
+    # Input for analyzing website content
+    website_content = st.text_area("Enter scraped website content for analysis")
 
-# Input for generating marketing copy
-brief = st.text_area("Enter a brief for generating marketing copy")
+    # Button to analyze content
+    if st.button("Analyze Website Content"):
+        if website_content:
+            analysis = analyze_website_content(website_content)
+            st.json(analysis)
+        else:
+            st.error("Please provide website content for analysis.")
 
-# Button to generate copy
-if st.button("Generate Marketing Copy"):
-    if brief:
-        copy = generate_copy(brief)
-        st.json(copy)
-    else:
-        st.error("Please provide a brief.")
+    # Input for generating marketing copy
+    brief = st.text_area("Enter a brief for generating marketing copy")
 
-# Inputs for creating a campaign idea
-target_audience = st.text_input("Target Audience")
-goals = st.text_area("Goals")
+    # Button to generate copy
+    if st.button("Generate Marketing Copy"):
+        if brief:
+            copy = generate_copy(brief)
+            st.json(copy)
+        else:
+            st.error("Please provide a brief.")
 
-# Button to create a campaign idea
-if st.button("Create Campaign Idea"):
-    if target_audience and goals:
-        campaign_idea = create_campaign_idea(target_audience, goals)
-        st.json(campaign_idea)
-    else:
-        st.error("Please provide both target audience and goals.")
+    # Inputs for creating a campaign idea
+    target_audience = st.text_input("Target Audience")
+    goals = st.text_area("Goals")
 
-# Instructions for the user
-st.info("Make sure to enter your API keys in the sidebar and fill in the necessary fields before clicking the buttons.")
+    # Button to create a campaign idea
+    if st.button("Create Campaign Idea"):
+        if target_audience and goals:
+            campaign_idea = create_campaign_idea(target_audience, goals)
+            st.json(campaign_idea)
+        else:
+            st.error("Please provide both target audience and goals.")
 
-# Run the app using: streamlit run app.py
+# Tab 2: Interactive Agent
+with tab2:
+    st.title("Interactive Marketing Assistant")
+    st.write("Refine your marketing brief iteratively with real-time feedback.")
+
+    # Input text area for user to refine their brief
+    user_input = st.text_input("Enter your brief or marketing idea:")
+
+    # Button to submit input and get a response from the agent
+    if st.button("Submit", key="interactive_submit") and user_input:
+        # Append the user input to messages
+        st.session_state.messages.append({"role": "user", "content": user_input})
+
+        # Run the agent with the current messages
+        response = swarm_client.run(agent=st.session_state.agent, messages=st.session_state.messages)
+        st.session_state.messages = response.messages
+        st.session_state.agent = response.agent
+
+    # Display the conversation history
+    st.write("### Conversation History:")
+    for message in st.session_state.messages:
+        if message["content"]:
+            st.write(f"**{message['role'].capitalize()}**: {message['content']}")
+
+    # Instructions for users
+    st.info("Enter your brief and click 'Submit' to refine it iteratively. Adjust your input based on the agent's feedback until you are satisfied.")
