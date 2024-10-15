@@ -1,262 +1,229 @@
 import streamlit as st
-import os
 from firecrawl import FirecrawlApp
-from swarm import Swarm, Agent
-import dotenv
+from swarm import Agent
 from openai import OpenAI
 
-# Load environment variables
-dotenv.load_dotenv()
+# Streamlit App Layout
+st.set_page_config(
+    page_title="Editorial News Assistant",
+    page_icon="📰",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# Streamlit sidebar for API key inputs
-st.sidebar.title("API Key Configuration")
-openai_api_key = st.sidebar.text_input("OpenAI API Key", type="password")
-firecrawl_api_key = st.sidebar.text_input("Firecrawl API Key", type="password")
+st.title("📰 Editorial News Assistant")
+st.markdown("""
+Welcome to the **Editorial News Assistant**! Enter the URL of a news article, and our assistant will generate a comprehensive editorial piece for you by scraping, analyzing, fact-checking, summarizing, and editing the content.
+""")
 
-# Store API keys in session state
-if 'openai_api_key' not in st.session_state:
-    st.session_state.openai_api_key = openai_api_key
-if 'firecrawl_api_key' not in st.session_state:
-    st.session_state.firecrawl_api_key = firecrawl_api_key
+# Sidebar for API Key Inputs
+st.sidebar.header("API Configuration")
 
-# Initialize clients only if API keys are provided
-@st.cache_resource
-def init_clients():
-    if not st.session_state.openai_api_key or not st.session_state.firecrawl_api_key:
-        st.error("Please provide both OpenAI and Firecrawl API keys in the sidebar.")
-        return None, None, None
-    
-    try:
-        app = FirecrawlApp(api_key=st.session_state.firecrawl_api_key)
-        client = OpenAI(api_key=st.session_state.openai_api_key)
-        swarm_client = Swarm()
-        return app, client, swarm_client
-    except Exception as e:
-        st.error(f"Error initializing clients: {str(e)}")
-        return None, None, None
+firecrawl_api_key = st.sidebar.text_input(
+    "Firecrawl API Key",
+    type="password",
+    help="Enter your Firecrawl API key here."
+)
 
-app, client, swarm_client = init_clients()
+openai_api_key = st.sidebar.text_input(
+    "OpenAI API Key",
+    type="password",
+    help="Enter your OpenAI API key here."
+)
 
-# Define function to scrape website directly using Firecrawl
+# Initialize FirecrawlApp and OpenAI only if API keys are provided
+if firecrawl_api_key and openai_api_key:
+    app = FirecrawlApp(api_key=firecrawl_api_key)
+    client = OpenAI(api_key=openai_api_key)
+else:
+    st.sidebar.warning("Please enter both Firecrawl and OpenAI API keys to proceed.")
+    st.stop()
+
 def scrape_website(url):
-    """Scrape a website using Firecrawl and return the raw response."""
-    try:
-        scrape_status = app.scrape_url(url, params={'formats': ['markdown']})
-        return scrape_status
-    except Exception as e:
-        st.error(f"Error scraping {url}: {str(e)}")
-        return None
+    """Scrape a website using Firecrawl."""
+    scrape_status = app.scrape_url(
+        url,
+        params={'formats': ['markdown']}
+    )
+    if scrape_status['status'] != 'success':
+        raise Exception(f"Scraping failed: {scrape_status.get('error', 'Unknown error')}")
+    return scrape_status['content']
 
 def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4",
         messages=[
-            {"role": "user", "content": f"You are a {role}. {task}\n\nContent: {content}"}
+            {"role": "system", "content": f"You are a {role}. {task}"},
+            {"role": "user", "content": content}
         ]
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content.strip()
 
-def extract_text_from_firecrawl_response(response):
-    """Extract the text content from a Firecrawl API response."""
-    if isinstance(response, dict):
-        # Assuming the response has a 'text' or 'content' field
-        return response.get('text', '') or response.get('content', '')
-    elif isinstance(response, str):
-        # If it's already a string, return it as is
-        return response
-    else:
-        # If it's neither a dict nor a string, convert it to a string
-        return str(response)
+def analyze_website_content(content):
+    """Analyze the scraped website content for key insights."""
+    analysis = generate_completion(
+        "content analyst",
+        "Analyze the following news content and provide key insights, including relevance, significance, and potential impact.",
+        content
+    )
+    return analysis
 
-def summarize_article(content):
-    """Summarize the scraped article content using OpenAI."""
+def fact_check_content(content):
+    """Fact-check the provided content."""
+    fact_check = generate_completion(
+        "fact checker",
+        "Verify the factual accuracy of the following news content. Highlight any discrepancies or confirm the validity of the information.",
+        content
+    )
+    return fact_check
+
+def summarize_content(content):
+    """Summarize the news content."""
     summary = generate_completion(
-        "editorial analyst",
-        "Summarize the following article content. Extract the most important quotes, important facts, and provide a one-paragraph summary.",
+        "summarizer",
+        "Provide a concise summary of the following news article.",
         content
     )
     return summary
 
-def generate_article_idea(summary):
-    """Generate an idea for what to do with the article using OpenAI."""
-    idea = generate_completion(
-        "content strategist",
-        "Based on the following article summary, generate an idea for a new article or content piece.",
-        summary
+def generate_editorial(analysis, fact_check, summary):
+    """Generate an editorial piece based on analysis, fact-check, and summary."""
+    editorial = generate_completion(
+        "editor",
+        "Compose a well-structured editorial article using the following analysis, fact-check results, and summary.",
+        f"Analysis: {analysis}\nFact Check: {fact_check}\nSummary: {summary}"
     )
-    return idea
+    return editorial
 
-def generate_style_suggestions(original_article, idea, target_audience, goals):
-    """Generate style and writing suggestions based on inputs."""
-    suggestions = generate_completion(
-        "editorial stylist",
-        "Provide style and writing suggestions based on the original article, new idea, target audience, and goals.",
-        f"Original Article: {original_article}\nNew Idea: {idea}\nTarget Audience: {target_audience}\nGoals: {goals}"
-    )
-    return suggestions
+# Define Agents
 
-def generate_new_article(original_article, idea, target_audience, goals, style_suggestions, custom_instructions):
-    """Generate a new article based on all inputs."""
-    new_article = generate_completion(
-        "content writer",
-        f"Create a new article based on the following inputs. {custom_instructions}",
-        f"Original Article: {original_article}\nNew Idea: {idea}\nTarget Audience: {target_audience}\nGoals: {goals}\nStyle Suggestions: {style_suggestions}"
-    )
-    return new_article
+def handoff_to_scraper():
+    """Hand off the URL to the website scraper agent."""
+    return website_scraper_agent
 
-# Define agents
-scraper_agent = Agent(
-    name="Scraper Agent",
-    instructions="You are a scraper agent specialized in scraping website content.",
-    functions=[scrape_website],
+def handoff_to_analyzer():
+    """Hand off the scraped content to the content analyzer agent."""
+    return content_analyzer_agent
+
+def handoff_to_fact_checker():
+    """Hand off the content to the fact checker agent."""
+    return fact_checker_agent
+
+def handoff_to_summarizer():
+    """Hand off the content to the summarizer agent."""
+    return summarizer_agent
+
+def handoff_to_editor():
+    """Hand off the analyzed and summarized content to the editor agent."""
+    return editor_agent
+
+user_interface_agent = Agent(
+    name="User Interface Agent",
+    instructions=(
+        "You are a user interface agent that manages interactions with the user. "
+        "Begin by requesting a URL of a news website that the user wants to create an editorial for. "
+        "Ask any necessary clarification questions. Be clear and concise."
+    ),
+    functions=[handoff_to_scraper],
+)
+
+website_scraper_agent = Agent(
+    name="Website Scraper Agent",
+    instructions="You are a website scraper agent specialized in extracting content from news websites.",
+    functions=[scrape_website, handoff_to_analyzer],
+)
+
+content_analyzer_agent = Agent(
+    name="Content Analyzer Agent",
+    instructions=(
+        "You are a content analyzer agent that examines scraped news content for key insights and relevance. "
+        "Provide a thorough analysis to aid in editorial creation. Be concise."
+    ),
+    functions=[analyze_website_content, handoff_to_fact_checker],
+)
+
+fact_checker_agent = Agent(
+    name="Fact Checker Agent",
+    instructions=(
+        "You are a fact checker agent responsible for verifying the accuracy of the news content. "
+        "Identify and highlight any discrepancies or confirm the validity of the information. Be precise."
+    ),
+    functions=[fact_check_content, handoff_to_summarizer],
 )
 
 summarizer_agent = Agent(
     name="Summarizer Agent",
-    instructions="You are a summarizer agent that examines scraped content and provides a concise summary.",
-    functions=[summarize_article],
+    instructions=(
+        "You are a summarizer agent tasked with condensing the news content into a concise summary. "
+        "Ensure that the summary captures all essential points. Be clear and succinct."
+    ),
+    functions=[summarize_content, handoff_to_editor],
 )
 
-idea_generator_agent = Agent(
-    name="Idea Generator Agent",
-    instructions="You are an idea generator agent that creates innovative content ideas based on article summaries.",
-    functions=[generate_article_idea],
+editor_agent = Agent(
+    name="Editor Agent",
+    instructions=(
+        "You are an editor agent responsible for composing a polished editorial article. "
+        "Utilize the analysis, fact-check results, and summary to create a coherent and engaging piece. "
+        "Ensure the editorial is well-structured and free of errors."
+    ),
+    functions=[generate_editorial],
 )
 
-style_suggester_agent = Agent(
-    name="Style Suggester Agent",
-    instructions="You are a style suggester agent specialized in providing style and writing suggestions based on content ideas and target audience.",
-    functions=[generate_style_suggestions],
-)
+# Define the workflow execution
+def run_agents(url):
+    try:
+        # Step 1: Scrape Website
+        scraped_content = scrape_website(url)
+        st.success("✅ Website scraped successfully.")
 
-article_generator_agent = Agent(
-    name="Article Generator Agent",
-    instructions="You are an article generator agent specialized in creating new articles based on all provided inputs.",
-    functions=[generate_new_article],
-)
+        # Step 2: Analyze Content
+        analysis = analyze_website_content(scraped_content)
+        st.info("📝 Content analyzed.")
 
-# Streamlit UI
-st.title("Editorial Assistant")
-st.write("Analyze articles, generate ideas, and create new content with ease.")
+        # Step 3: Fact Check
+        fact_check = fact_check_content(scraped_content)
+        st.info("🔍 Fact-checked the content.")
 
-# 1. Scrape websites
-st.header("1. Scrape Websites")
-url1 = st.text_input("Enter the first website URL to scrape")
-url2 = st.text_input("Enter the second website URL to scrape")
+        # Step 4: Summarize
+        summary = summarize_content(scraped_content)
+        st.info("📝 Content summarized.")
 
-if st.button("Scrape Websites"):
-    if not app:
-        st.error("Please provide a valid Firecrawl API key before proceeding.")
-    elif url1 or url2:
-        scraped_content = {}
-        if url1:
-            content1 = scrape_website(url1)
-            if content1:
-                scraped_content["source1"] = content1
-        if url2:
-            content2 = scrape_website(url2)
-            if content2:
-                scraped_content["source2"] = content2
-        
-        if scraped_content:
-            st.session_state.scraped_content = scraped_content
-            st.success("Websites scraped successfully!")
-        else:
-            st.error("Failed to scrape any content. Please check the URLs and try again.")
+        # Step 5: Generate Editorial
+        editorial = generate_editorial(analysis, fact_check, summary)
+        st.success("📰 Editorial generated successfully.")
+
+        return {
+            "Analysis": analysis,
+            "Fact Check": fact_check,
+            "Summary": summary,
+            "Editorial": editorial
+        }
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
+        return None
+
+# Streamlit App Main Interface
+with st.form(key='news_form'):
+    url = st.text_input("Enter News Article URL:", "")
+    submit_button = st.form_submit_button(label='Generate Editorial')
+
+if submit_button:
+    if not url:
+        st.error("Please enter a valid URL.")
     else:
-        st.error("Please enter at least one valid URL.")
+        with st.spinner("Processing..."):
+            results = run_agents(url)
+            if results:
+                st.subheader("🔍 Analysis")
+                st.write(results["Analysis"])
 
-# Display scraped content (if available)
-if hasattr(st.session_state, 'scraped_content'):
-    with st.expander("View Scraped Content", expanded=True):
-        tab1, tab2 = st.tabs(["Source 1", "Source 2"])
-        
-        with tab1:
-            if "source1" in st.session_state.scraped_content:
-                st.json(st.session_state.scraped_content["source1"])
-            else:
-                st.write("No content scraped for Source 1")
-        
-        with tab2:
-            if "source2" in st.session_state.scraped_content:
-                st.json(st.session_state.scraped_content["source2"])
-            else:
-                st.write("No content scraped for Source 2")
+                st.subheader("🔍 Fact Check")
+                st.write(results["Fact Check"])
 
-# 2. Summarize the article
-st.header("2. Summarize the Article")
-if st.button("Summarize Article"):
-    if hasattr(st.session_state, 'scraped_content'):
-        # Extract text content from each source
-        extracted_contents = []
-        for source, content in st.session_state.scraped_content.items():
-            extracted_text = extract_text_from_firecrawl_response(content)
-            extracted_contents.append(f"Source: {source}\n\n{extracted_text}")
-        
-        # Combine extracted contents
-        combined_content = "\n\n---\n\n".join(extracted_contents)
-        
-        # Summarize using the summarizer agent
-        response = swarm_client.run(agent=summarizer_agent, messages=[{"role": "user", "content": combined_content}])
-        summary = response.messages[-1]["content"]
-        st.session_state.summary = summary
-        st.markdown(summary)
-    else:
-        st.error("Please scrape websites first.")
+                st.subheader("📝 Summary")
+                st.write(results["Summary"])
 
-# 3. Generate article idea
-st.header("3. Generate Article Idea")
-if st.button("Generate Idea"):
-    if hasattr(st.session_state, 'summary'):
-        response = swarm_client.run(agent=idea_generator_agent, messages=[{"role": "user", "content": st.session_state.summary}])
-        idea = response.messages[-1]["content"]
-        st.session_state.idea = idea
-        st.write(idea)
-    else:
-        st.error("Please summarize the article first.")
-
-# 4. Enter custom instructions
-st.header("4. Custom Instructions")
-custom_instructions = st.text_area("Enter custom instructions for generating the new article")
-
-# 5. Target audience input
-st.header("5. Target Audience")
-target_audience = st.text_input("Enter the target audience for the new article")
-
-# 6. Goals for the new article
-st.header("6. Article Goals")
-goals = st.text_area("Enter the goals for the new article")
-
-# 7. Generate style and writing suggestions
-st.header("7. Generate Style Suggestions")
-if st.button("Generate Style Suggestions"):
-    if all(hasattr(st.session_state, attr) for attr in ['scraped_content', 'idea']):
-        response = swarm_client.run(
-            agent=style_suggester_agent, 
-            messages=[{
-                "role": "user", 
-                "content": f"Original Article: {st.session_state.scraped_content}\nNew Idea: {st.session_state.idea}\nTarget Audience: {target_audience}\nGoals: {goals}"
-            }]
-        )
-        style_suggestions = response.messages[-1]["content"]
-        st.session_state.style_suggestions = style_suggestions
-        st.write(style_suggestions)
-    else:
-        st.error("Please complete all previous steps first.")
-
-# 8. Generate the new article
-st.header("8. Generate New Article")
-if st.button("Generate New Article"):
-    if all(hasattr(st.session_state, attr) for attr in ['scraped_content', 'idea', 'style_suggestions']):
-        response = swarm_client.run(
-            agent=article_generator_agent,
-            messages=[{
-                "role": "user",
-                "content": f"Original Article: {st.session_state.scraped_content}\nNew Idea: {st.session_state.idea}\nTarget Audience: {target_audience}\nGoals: {goals}\nStyle Suggestions: {st.session_state.style_suggestions}\nCustom Instructions: {custom_instructions}"
-            }]
-        )
-        new_article = response.messages[-1]["content"]
-        st.markdown(new_article)
-    else:
-        st.error("Please complete all previous steps first.")
+                st.subheader("📰 Editorial")
+                st.write(results["Editorial"])
