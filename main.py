@@ -51,20 +51,12 @@ def scrape_website(url):
             params={'formats': ['markdown']}
         )
         st.write("🔍 Scrape Response:", scrape_response)  # Debugging statement
-        
-        # Check if 'status' exists
-        if isinstance(scrape_response, dict) and 'status' in scrape_response:
-            if scrape_response['status'] != 'success':
-                error_message = scrape_response.get('error', 'Unknown error')
-                raise Exception(f"Scraping failed: {error_message}")
-            return scrape_response.get('content', '')
-        
-        # If 'status' key is missing, assume 'content' is present
-        elif isinstance(scrape_response, dict) and 'content' in scrape_response:
-            return scrape_response['content']
-        
+
+        # Check if 'markdown' exists in the response
+        if isinstance(scrape_response, dict) and 'markdown' in scrape_response:
+            return scrape_response['markdown']
         else:
-            raise KeyError("Neither 'status' nor 'content' keys are present in the scrape response.")
+            raise KeyError("Neither 'markdown' nor 'content' keys are present in the scrape response.")
     
     except Exception as e:
         st.error(f"An error occurred during scraping: {str(e)}")
@@ -74,7 +66,7 @@ def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": f"You are a {role}. {task}"},
                 {"role": "user", "content": content}
