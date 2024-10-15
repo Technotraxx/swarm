@@ -92,23 +92,42 @@ url2 = st.text_input("Enter the second website URL to scrape")
 
 if st.button("Scrape Websites"):
     if url1 or url2:
-        scraped_content = ""
+        scraped_content = {}
         if url1:
             scrape_status1 = scrape_website(url1)
-            scraped_content += json.dumps(scrape_status1) + "\n\n"
+            scraped_content["source1"] = scrape_status1
         if url2:
             scrape_status2 = scrape_website(url2)
-            scraped_content += json.dumps(scrape_status2)
+            scraped_content["source2"] = scrape_status2
         st.session_state.scraped_content = scraped_content
         st.success("Websites scraped successfully!")
     else:
         st.error("Please enter at least one valid URL.")
 
+# Display scraped content in an expander with tabs
+if hasattr(st.session_state, 'scraped_content'):
+    with st.expander("View Scraped Content", expanded=True):
+        tab1, tab2 = st.tabs(["Source 1", "Source 2"])
+        
+        with tab1:
+            if "source1" in st.session_state.scraped_content:
+                st.json(st.session_state.scraped_content["source1"])
+            else:
+                st.write("No content scraped for Source 1")
+        
+        with tab2:
+            if "source2" in st.session_state.scraped_content:
+                st.json(st.session_state.scraped_content["source2"])
+            else:
+                st.write("No content scraped for Source 2")
+
 # 2. Summarize the article
 st.header("2. Summarize the Article")
 if st.button("Summarize Article"):
     if hasattr(st.session_state, 'scraped_content'):
-        summary = summarize_article(st.session_state.scraped_content)
+        # Combine content from both sources
+        combined_content = json.dumps(st.session_state.scraped_content)
+        summary = summarize_article(combined_content)
         st.session_state.summary = summary
         st.markdown(summary)
     else:
