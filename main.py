@@ -38,7 +38,7 @@ def scrape_website(url):
 def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
     response = client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="o1-mini",
         messages=[
             {"role": "system", "content": f"You are a {role}. {task}"},
             {"role": "user", "content": content}
