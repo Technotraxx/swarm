@@ -40,8 +40,7 @@ def generate_completion(role, task, content):
     response = client.chat.completions.create(
         model="o1-mini",
         messages=[
-            {"role": "system", "content": f"You are a {role}. {task}"},
-            {"role": "user", "content": content}
+            {"role": "user", "content": f"You are a {role}. {task}\n\nContent: {content}"}
         ]
     )
     return response.choices[0].message.content
