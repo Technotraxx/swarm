@@ -46,16 +46,26 @@ else:
 def scrape_website(url):
     """Scrape a website using Firecrawl."""
     try:
-        scrape_status = app.scrape_url(
+        scrape_response = app.scrape_url(
             url,
             params={'formats': ['markdown']}
         )
-        st.write("🔍 Scrape Status Response:", scrape_status)  # Debugging statement
-        if 'status' not in scrape_status:
-            raise KeyError("'status' key is missing in the scrape response.")
-        if scrape_status['status'] != 'success':
-            raise Exception(f"Scraping failed: {scrape_status.get('error', 'Unknown error')}")
-        return scrape_status['content']
+        st.write("🔍 Scrape Response:", scrape_response)  # Debugging statement
+        
+        # Check if 'status' exists
+        if isinstance(scrape_response, dict) and 'status' in scrape_response:
+            if scrape_response['status'] != 'success':
+                error_message = scrape_response.get('error', 'Unknown error')
+                raise Exception(f"Scraping failed: {error_message}")
+            return scrape_response.get('content', '')
+        
+        # If 'status' key is missing, assume 'content' is present
+        elif isinstance(scrape_response, dict) and 'content' in scrape_response:
+            return scrape_response['content']
+        
+        else:
+            raise KeyError("Neither 'status' nor 'content' keys are present in the scrape response.")
+    
     except Exception as e:
         st.error(f"An error occurred during scraping: {str(e)}")
         return None
@@ -64,7 +74,7 @@ def generate_completion(role, task, content):
     """Generate a completion using OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": f"You are a {role}. {task}"},
                 {"role": "user", "content": content}
