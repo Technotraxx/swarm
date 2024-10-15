@@ -127,4 +127,30 @@ with tab2:
     st.write("### Conversation History:")
     for message in st.session_state.messages:
         if message["content"]:
-       
+            st.write(f"**{message['role'].capitalize()}**: {message['content']}")
+
+    # Provide interactive suggestions
+    if st.session_state.messages:
+        last_agent_message = [msg for msg in st.session_state.messages if msg["role"] == "assistant"][-1]["content"]
+        st.write("### Content Suggestions:")
+        st.write(last_agent_message)
+
+        # Predefined options for iterating on suggestions
+        st.write("### Would you like to refine further?")
+        if st.button("Clarify Benefits"):
+            st.session_state.messages.append({"role": "user", "content": "Can you clarify the benefits in more detail?"})
+        if st.button("Add Examples"):
+            st.session_state.messages.append({"role": "user", "content": "Can you add examples to make it more engaging?"})
+        if st.button("Simplify Content"):
+            st.session_state.messages.append({"role": "user", "content": "Can you simplify the content to make it more accessible?"})
+        if st.button("Change Focus"):
+            st.session_state.messages.append({"role": "user", "content": "Can we change the focus to highlight a different aspect?"})
+        
+        # Automatically run the agent after user chooses a refinement option
+        if any(st.session_state.messages):
+            response = swarm_client.run(agent=st.session_state.agent, messages=st.session_state.messages)
+            st.session_state.messages = response.messages
+            st.session_state.agent = response.agent
+
+    # Instructions for users
+    st.info("Use the predefined buttons to refine your brief iteratively. Adjust your input based on the agent’s feedback until you are satisfied.")
