@@ -67,7 +67,7 @@ def generate_completion(role, task, content):
     """Generiere eine Vervollständigung mit OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4",  # Stellen Sie sicher, dass der Modellname korrekt ist
+            model="gpt-4o",  # Stellen Sie sicher, dass der Modellname korrekt ist
             messages=[
                 {"role": "system", "content": f"Du bist ein {role}. {task}"},
                 {"role": "user", "content": content}
