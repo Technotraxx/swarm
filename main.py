@@ -3,17 +3,30 @@ import os
 import json
 from firecrawl import FirecrawlApp
 from swarm import Swarm, Agent
-from swarm.repl import run_demo_loop
 import dotenv
 from openai import OpenAI
 
 # Load environment variables
 dotenv.load_dotenv()
 
+# Streamlit sidebar for API key inputs
+st.sidebar.title("API Key Configuration")
+openai_api_key = st.sidebar.text_input("OpenAI API Key", type="password")
+firecrawl_api_key = st.sidebar.text_input("Firecrawl API Key", type="password")
+
+# Store API keys in environment variables
+os.environ["OPENAI_API_KEY"] = openai_api_key
+os.environ["FIRECRAWL_API_KEY"] = firecrawl_api_key
+
 # Initialize FirecrawlApp, OpenAI client, and Swarm client
-app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-swarm_client = Swarm()
+@st.cache_resource
+def init_clients():
+    app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    swarm_client = Swarm()
+    return app, client, swarm_client
+
+app, client, swarm_client = init_clients()
 
 # Define functions
 def scrape_website(url):
@@ -87,7 +100,7 @@ def handoff_to_article_generator():
 user_interface_agent = Agent(
     name="User Interface Agent",
     instructions="You are a user interface agent that handles all interactions with the user. You need to always start by asking for URLs to scrape. Ask clarification questions if needed. Be concise.",
-    functions=[handoff_to_scraper],
+    functions=[scrape_website],
 )
 
 scraper_agent = Agent(
@@ -138,23 +151,28 @@ for message in st.session_state.conversation:
 user_input = st.text_input("Your input:")
 
 if st.button("Submit"):
-    # Add user input to conversation
-    st.session_state.conversation.append({"role": "User", "content": user_input})
-    
-    # Process user input with current agent
-    response = swarm_client.run(agent=st.session_state.current_agent, messages=[{"role": "user", "content": user_input}])
-    
-    # Add agent response to conversation
-    st.session_state.conversation.append({"role": st.session_state.current_agent.name, "content": response.content})
-    
-    # Check if agent handed off to another agent
-    if response.next_agent:
-        st.session_state.current_agent = response.next_agent
-        st.write(f"Handing off to {response.next_agent.name}")
-    
-    # Rerun the app to update the display
-    st.experimental_rerun()
+    if not openai_api_key or not firecrawl_api_key:
+        st.error("Please enter both API keys in the sidebar.")
+    else:
+        try:
+            # Add user input to conversation
+            st.session_state.conversation.append({"role": "User", "content": user_input})
+            
+            # Process user input with current agent
+            response = swarm_client.run(agent=st.session_state.current_agent, messages=[{"role": "user", "content": user_input}])
+            
+            # Add agent response to conversation
+            st.session_state.conversation.append({"role": st.session_state.current_agent.name, "content": response.content})
+            
+            # Check if agent handed off to another agent
+            if response.next_agent:
+                st.session_state.current_agent = response.next_agent
+                st.write(f"Handing off to {response.next_agent.name}")
+            
+            # Rerun the app to update the display
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
 
-# Run the Streamlit app
-if __name__ == "__main__":
-    st.sidebar.write(f"Current Agent: {st.session_state.current_agent.name}")
+# Display current agent in sidebar
+st.sidebar.write(f"Current Agent: {st.session_state.current_agent.name}")
