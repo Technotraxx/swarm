@@ -50,33 +50,43 @@ def generate_completion(role: str, task: str, content: str) -> str:
 def search_google(query: str, objective: str) -> Dict[str, Any]:
     """Search Google using SerpAPI."""
     try:
+        st.info(f"Searching Google for: {query}")
         search = GoogleSearch({
             "q": query,
-            "api_key": os.getenv("SERP_API_KEY")
+            "api_key": serp_api_key  # Use the API key from Streamlit input
         })
-        results = search.get_dict().get("organic_results", [])
-        return {"objective": objective, "results": results}
+        results = search.get_dict()
+        st.info(f"Raw SerpAPI results: {results}")
+        organic_results = results.get("organic_results", [])
+        if not organic_results:
+            st.warning("No organic results found in the SerpAPI response.")
+        return {"objective": objective, "results": organic_results}
     except Exception as e:
-        logging.error(f"Error searching Google: {e}")
+        st.error(f"Error searching Google: {str(e)}")
         return {"objective": objective, "results": [], "error": str(e)}
-
+        
 def map_url_pages(url: str, objective: str) -> Dict[str, Any]:
     """Map a website's pages using Firecrawl."""
     try:
+        st.info(f"Mapping URL: {url}")
         search_query = generate_completion(
             "website search query generator",
             f"Generate a 1-2 word search query for the website: {url} based on the objective",
             f"Objective: {objective}"
         )
+        st.info(f"Generated search query: {search_query}")
         map_status = app.map_url(url, params={"search": search_query})
+        st.info(f"Firecrawl map_url response: {map_status}")
         if map_status.get('status') == 'success':
             links = map_status.get('links', [])
             top_link = links[0] if links else None
             return {"objective": objective, "results": [top_link] if top_link else []}
         else:
-            return {"objective": objective, "results": [], "error": "Mapping failed"}
+            error_message = map_status.get('message', 'Unknown error')
+            st.error(f"Firecrawl mapping failed: {error_message}")
+            return {"objective": objective, "results": [], "error": f"Mapping failed: {error_message}"}
     except Exception as e:
-        st.error(f"Error mapping URL pages: {e}")
+        st.error(f"Error mapping URL pages: {str(e)}")
         return {"objective": objective, "results": [], "error": str(e)}
 
 def scrape_url(url: str, objective: str) -> Dict[str, Any]:
