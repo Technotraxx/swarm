@@ -151,14 +151,22 @@ def scrape_url(url: str, objective: str) -> Dict[str, Any]:
         st.error(f"Error scraping URL: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
 
-def analyze_website_content(content: str, objective: str, role: str) -> Dict[str, Any]:
+def analyze_website_content(content: str, objective: str, role: str, instruction_option: str) -> Dict[str, Any]:
     """Analyze the scraped website content using OpenAI."""
     try:
         if not content:
             return {"objective": objective, "results": None, "error": "No content to analyze"}
         
-        task = "Analyze the following website content from one or more URLs and extract key insights based on the objective. Provide a summary of the main points and any relevant details."
-        prompt = f"Objective: {objective}\n\nContent: {content[:16000]}"  # Increased limit to accommodate multiple URLs
+        if instruction_option == "default":
+            task = "Analyze the following website content from one or more URLs and extract key insights based on the objective. Provide a summary of the main points and any relevant details."
+        elif instruction_option == "german":
+            task = "Analysiere den folgenden Website-Inhalt von einer oder mehreren URLs und extrahiere wichtige Erkenntnisse basierend auf dem Ziel. Gib eine Zusammenfassung der Hauptpunkte und aller relevanten Details."
+        elif instruction_option == "structured":
+            task = "Extrahiere alle Fakten und Kerndaten aus dem folgenden Website-Inhalt. Strukturiere die Informationen als JSON-Ausgabe und inkludiere die Quelle für jede Information. Berücksichtige dabei das gegebene Ziel."
+        elif instruction_option == "summary":
+            task = "Schreibe für jeden Inhalt der folgenden Websites eine kurze Zusammenfassung. Berücksichtige dabei das gegebene Ziel und stelle sicher, dass jede Zusammenfassung klar der entsprechenden URL zugeordnet ist."
+        
+        prompt = f"Ziel: {objective}\n\nInhalt: {content[:8000]}"  # Limit content to 8000 characters
         
         analysis = generate_completion(task, prompt, role)
         
@@ -188,6 +196,18 @@ def main():
     # Input fields
     objective = st.text_input("Enter your web data extraction objective:")
     role = st.text_input("Enter the role for analysis (e.g., data analyst, financial expert):", value="data analyst")
+
+    # Instruction option dropdown
+    instruction_option = st.selectbox(
+        "Select analysis instruction:",
+        ["default", "german", "structured", "summary"],
+        format_func=lambda x: {
+            "default": "Default (English)",
+            "german": "Default (German)",
+            "structured": "Structured JSON output",
+            "summary": "Summary for each content"
+        }[x]
+    )
     
     # Search type selection
     search_type = st.radio("Select search type:", ("Google Search", "Google News"))
@@ -261,7 +281,7 @@ def main():
             combined_content = "\n".join(all_scraped_content)
             
             # Analyze combined content
-            analysis_results = analyze_website_content(combined_content, objective, role)
+            analysis_results = analyze_website_content(combined_content, objective, role, instruction_option)
             if analysis_results.get("error"):
                 st.error(f"Error in analyzing content: {analysis_results['error']}")
                 return
