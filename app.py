@@ -36,7 +36,7 @@ def generate_completion(role: str, task: str, content: str) -> str:
     """Generate a completion using OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": f"You are a {role}. {task}"},
                 {"role": "user", "content": content}
