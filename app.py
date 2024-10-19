@@ -1,14 +1,12 @@
-import streamlit as st
 import os
-import json
-import logging
-from typing import Dict, Any
-
-from openai import OpenAI
 from firecrawl import FirecrawlApp
-from googlesearch import search
+from swarm import Agent
+from swarm.repl import run_demo_loop
+import dotenv
 from serpapi import GoogleSearch
+from openai import OpenAI
 
+dotenv.load_dotenv()
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -49,12 +47,12 @@ def search_google(query: str, objective: str) -> Dict[str, Any]:
     try:
         search = GoogleSearch({
             "q": query,
-            "api_key": serp_api_key
+            "api_key": os.getenv("SERP_API_KEY")
         })
         results = search.get_dict().get("organic_results", [])
         return {"objective": objective, "results": results}
     except Exception as e:
-        st.error(f"Error searching Google: {e}")
+        logging.error(f"Error searching Google: {e}")
         return {"objective": objective, "results": [], "error": str(e)}
 
 def map_url_pages(url: str, objective: str) -> Dict[str, Any]:
