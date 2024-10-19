@@ -8,6 +8,7 @@ from firecrawl import FirecrawlApp
 from swarm import Agent
 from swarm.repl import run_demo_loop
 from serpapi import GoogleSearch
+import json
 
 # Load environment variables
 load_dotenv()
@@ -36,7 +37,7 @@ def generate_completion(role: str, task: str, content: str) -> str:
     """Generate a completion using OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o",  # or "gpt-4" if you have access
             messages=[
                 {"role": "system", "content": f"You are a {role}. {task}"},
                 {"role": "user", "content": content}
@@ -125,7 +126,7 @@ def analyze_website_content(content: str, objective: str) -> Dict[str, Any]:
         analysis = generate_completion(
             "data analyst",
             f"Analyze the following website content and extract key insights based on the objective.",
-            f"Objective: {objective}\n\nContent: {content[:8000]}"  # Limit content to 4000 characters to avoid token limits
+            f"Objective: {objective}\n\nContent: {content[:4000]}"  # Limit content to 4000 characters to avoid token limits
         )
         
         # Attempt to parse the analysis as JSON, but fall back to string if it fails
