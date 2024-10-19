@@ -94,32 +94,49 @@ def map_url_pages(url: str, objective: str) -> Dict[str, Any]:
 def scrape_url(url: str, objective: str) -> Dict[str, Any]:
     """Scrape a website using Firecrawl."""
     try:
+        st.info(f"Scraping URL: {url}")
         scrape_status = app.scrape_url(
             url,
             params={'formats': ['markdown']}
         )
-        return {"objective": objective, "results": scrape_status}
+        st.info(f"Firecrawl scrape_url response: {scrape_status}")
+        
+        if scrape_status.get('success'):
+            markdown_content = scrape_status.get('data', {}).get('markdown', '')
+            if not markdown_content:
+                st.warning("No markdown content found in the scrape results.")
+            return {"objective": objective, "results": markdown_content}
+        else:
+            error_message = scrape_status.get('message', 'Unknown error')
+            st.error(f"Firecrawl scraping failed: {error_message}")
+            return {"objective": objective, "results": None, "error": f"Scraping failed: {error_message}"}
     except Exception as e:
-        st.error(f"Error scraping URL: {e}")
+        st.error(f"Error scraping URL: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
 
 def analyze_website_content(content: str, objective: str) -> Dict[str, Any]:
     """Analyze the scraped website content using OpenAI."""
     try:
+        if not content:
+            return {"objective": objective, "results": None, "error": "No content to analyze"}
+        
         analysis = generate_completion(
             "data analyst",
             f"Analyze the following website content and extract key insights based on the objective.",
-            content
+            f"Objective: {objective}\n\nContent: {content[:8000]}"  # Limit content to 4000 characters to avoid token limits
         )
-        return {"objective": objective, "results": json.loads(analysis)}
-    except json.JSONDecodeError as e:
-        st.error(f"Error decoding JSON from analysis: {e}")
-        return {"objective": objective, "results": None, "error": f"Invalid JSON returned from OpenAI: {e}"}
+        
+        # Attempt to parse the analysis as JSON, but fall back to string if it fails
+        try:
+            analysis_results = json.loads(analysis)
+        except json.JSONDecodeError:
+            analysis_results = {"analysis": analysis}
+        
+        return {"objective": objective, "results": analysis_results}
     except Exception as e:
-        st.error(f"Error analyzing website content: {e}")
+        st.error(f"Error analyzing website content: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
 
-# Main app logic
 def main():
     st.header("Web Data Extraction")
     
@@ -161,7 +178,7 @@ def main():
                 return
             
             # Analyze content
-            analysis_results = analyze_website_content(scrape_results["results"]["content"], objective)
+            analysis_results = analyze_website_content(scrape_results["results"], objective)
             if analysis_results.get("error"):
                 st.error(f"Error in analyzing content: {analysis_results['error']}")
                 return
