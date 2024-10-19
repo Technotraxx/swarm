@@ -177,76 +177,66 @@ def analyze_website_content(content: str, objective: str, role: str) -> Dict[str
 def main():
     st.header("Web Data Extraction")
     
+    # Initialize session state variables
+    if 'search_performed' not in st.session_state:
+        st.session_state.search_performed = False
+    if 'search_results' not in st.session_state:
+        st.session_state.search_results = []
+    if 'checkbox_states' not in st.session_state:
+        st.session_state.checkbox_states = []
+
+    # Input fields
     objective = st.text_input("Enter your web data extraction objective:")
     role = st.text_input("Enter the role for analysis (e.g., data analyst, financial expert):", value="data analyst")
     url = st.text_input("Enter the URL to analyze (optional):")
     
-    # Add radio button for search type selection
+    # Search type selection
     search_type = st.radio("Select search type:", ("Google Search", "Google News"))
     
-    # Add dropdown menus for country and language selection
+    # Country and language selection
     col1, col2 = st.columns(2)
     with col1:
         country = st.selectbox("Select country:", list(COUNTRIES.keys()))
     with col2:
         language = st.selectbox("Select language:", list(LANGUAGES.keys()))
     
+    # Search button
+    if st.button("Search") and objective:
+        st.session_state.search_performed = True
+        with st.spinner("Searching..."):
+            search_results = search_google(objective, objective, search_type, COUNTRIES[country], LANGUAGES[language])
+            if search_results.get("error"):
+                st.error(f"Error in {search_type}: {search_results['error']}")
+            else:
+                if search_type == "Google News":
+                    st.session_state.search_results = search_results.get("news_results", [])[:5]
+                else:
+                    st.session_state.search_results = search_results.get("organic_results", [])[:5]
+                st.session_state.checkbox_states = [False] * len(st.session_state.search_results)
+
+    # Display search results and checkboxes
+    if st.session_state.search_performed and st.session_state.search_results:
+        st.subheader("Top 5 Search Results")
+        for i, result in enumerate(st.session_state.search_results):
+            col1, col2 = st.columns([0.1, 0.9])
+            with col1:
+                st.session_state.checkbox_states[i] = st.checkbox("", key=f"checkbox_{i}", value=st.session_state.checkbox_states[i])
+            with col2:
+                st.write(f"**{result['title']}**")
+                st.write(f"Source: {result['link']}")
+
+    # Analysis button
     if st.button("Start Analysis"):
-        if not objective:
-            st.warning("Please enter an objective.")
+        selected_urls = [result['link'] for i, result in enumerate(st.session_state.search_results) if st.session_state.checkbox_states[i]]
+        
+        if not selected_urls and not url:
+            st.warning("Please select at least one URL to analyze or enter a specific URL.")
             return
         
-        with st.spinner("Processing..."):
-            if not url:
-                # Perform search based on selected type, country, and language
-                search_results = search_google(objective, objective, search_type, COUNTRIES[country], LANGUAGES[language])
-                if search_results.get("error"):
-                    st.error(f"Error in {search_type}: {search_results['error']}")
-                    return
-                
-                # Display raw SerpAPI results in an expander
-                with st.expander(f"View Raw {search_type} Results"):
-                    st.json(search_results)
-                
-                # Extract and display top 5 results
-                if search_type == "Google News":
-                    results = search_results.get("news_results", [])
-                else:
-                    results = search_results.get("organic_results", [])
-                
-                if not results:
-                    st.warning(f"No results found from {search_type}.")
-                    return
-                
-                top_5_results = results[:5]
-                
-                st.subheader("Top 5 Search Results")
-                
-                # Initialize session state for checkboxes if not exists
-                if 'checkbox_states' not in st.session_state:
-                    st.session_state.checkbox_states = [False] * len(top_5_results)
-                
-                selected_urls = []
-                
-                for i, result in enumerate(top_5_results):
-                    col1, col2 = st.columns([0.1, 0.9])
-                    with col1:
-                        # Use key with index to create unique keys
-                        checked = st.checkbox("", key=f"checkbox_{i}", value=st.session_state.checkbox_states[i])
-                        st.session_state.checkbox_states[i] = checked
-                    with col2:
-                        st.write(f"**{result['title']}**")
-                        st.write(f"Source: {result['link']}")
-                    
-                    if checked:
-                        selected_urls.append(result['link'])
-                
-                if not selected_urls:
-                    st.warning("Please select at least one URL to analyze.")
-                    return
-            else:
-                selected_urls = [url]
-            
+        if url:
+            selected_urls = [url]
+        
+        with st.spinner("Analyzing..."):
             # Scrape all selected URLs
             all_scraped_content = []
             for url in selected_urls:
