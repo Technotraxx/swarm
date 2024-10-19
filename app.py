@@ -8,7 +8,9 @@ from swarm import Agent
 from swarm.repl import run_demo_loop
 from serpapi import GoogleSearch
 
-dotenv.load_dotenv()
+# Load environment variables
+load_dotenv()
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
