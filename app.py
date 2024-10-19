@@ -157,8 +157,8 @@ def analyze_website_content(content: str, objective: str, role: str) -> Dict[str
         if not content:
             return {"objective": objective, "results": None, "error": "No content to analyze"}
         
-        task = "Analyze the following website content and extract key insights based on the objective."
-        prompt = f"Objective: {objective}\n\nContent: {content[:16000]}"  # Limit content to 4000 characters to avoid token limits
+        task = "Analyze the following website content from one or more URLs and extract key insights based on the objective. Provide a summary of the main points and any relevant details."
+        prompt = f"Objective: {objective}\n\nContent: {content[:16000]}"  # Increased limit to accommodate multiple URLs
         
         analysis = generate_completion(task, prompt, role)
         
@@ -224,27 +224,47 @@ def main():
                 if 'title' in df.columns and 'link' in df.columns:
                     df = df[['title', 'link']]  # Select only title and link columns
                     st.subheader("Top 5 Search Results")
-                    st.dataframe(df)
                     
-                    # For now, we'll continue with the first result
-                    url = df['link'].iloc[0]
-                    st.info(f"Analyzing first result: {url}")
+                    # Add checkboxes for URL selection
+                    selected_indices = []
+                    for i, row in df.iterrows():
+                        if st.checkbox(f"{row['title']}", key=f"checkbox_{i}"):
+                            selected_indices.append(i)
+                    
+                    if not selected_indices:
+                        st.warning("Please select at least one URL to analyze.")
+                        return
+                    
+                    selected_urls = df.loc[selected_indices, 'link'].tolist()
                 else:
                     st.error("Unexpected result format. Unable to display results.")
                     return
+            else:
+                selected_urls = [url]
             
-            # Scrape URL
-            scrape_results = scrape_url(url, objective)
-            if scrape_results.get("error"):
-                st.error(f"Error in scraping URL: {scrape_results['error']}")
+            # Scrape all selected URLs
+            all_scraped_content = []
+            for url in selected_urls:
+                st.info(f"Scraping URL: {url}")
+                scrape_results = scrape_url(url, objective)
+                if scrape_results.get("error"):
+                    st.warning(f"Error in scraping URL {url}: {scrape_results['error']}")
+                    continue
+                
+                if scrape_results.get("results"):
+                    all_scraped_content.append(f"Content from {url}:\n{scrape_results['results']}\n\n")
+                else:
+                    st.warning(f"No content was scraped from the URL: {url}")
+            
+            if not all_scraped_content:
+                st.error("No content was successfully scraped from any of the selected URLs.")
                 return
             
-            if not scrape_results.get("results"):
-                st.error("No content was scraped from the URL.")
-                return
+            # Combine all scraped content
+            combined_content = "\n".join(all_scraped_content)
             
-            # Analyze content
-            analysis_results = analyze_website_content(scrape_results["results"], objective, role)
+            # Analyze combined content
+            analysis_results = analyze_website_content(combined_content, objective, role)
             if analysis_results.get("error"):
                 st.error(f"Error in analyzing content: {analysis_results['error']}")
                 return
