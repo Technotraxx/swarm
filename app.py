@@ -99,17 +99,19 @@ def scrape_url(url: str, objective: str) -> Dict[str, Any]:
             url,
             params={'formats': ['markdown']}
         )
-        st.info(f"Firecrawl scrape_url response: {scrape_status}")
+        st.info(f"Firecrawl scrape_url response received.")
         
-        if scrape_status.get('success'):
-            markdown_content = scrape_status.get('data', {}).get('markdown', '')
-            if not markdown_content:
+        if isinstance(scrape_status, dict) and 'markdown' in scrape_status:
+            markdown_content = scrape_status['markdown']
+            if markdown_content:
+                st.success("Successfully scraped content.")
+                return {"objective": objective, "results": markdown_content}
+            else:
                 st.warning("No markdown content found in the scrape results.")
-            return {"objective": objective, "results": markdown_content}
+                return {"objective": objective, "results": None, "error": "No content scraped"}
         else:
-            error_message = scrape_status.get('message', 'Unknown error')
-            st.error(f"Firecrawl scraping failed: {error_message}")
-            return {"objective": objective, "results": None, "error": f"Scraping failed: {error_message}"}
+            st.error(f"Unexpected response format from Firecrawl API: {scrape_status}")
+            return {"objective": objective, "results": None, "error": "Unexpected API response format"}
     except Exception as e:
         st.error(f"Error scraping URL: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
@@ -141,40 +143,22 @@ def main():
     st.header("Web Data Extraction")
     
     objective = st.text_input("Enter your web data extraction objective:")
-    url = st.text_input("Enter the URL to analyze (optional):")
+    url = st.text_input("Enter the URL to analyze:")
     
     if st.button("Start Analysis"):
-        if not objective:
-            st.warning("Please enter an objective.")
+        if not objective or not url:
+            st.warning("Please enter both an objective and a URL.")
             return
         
         with st.spinner("Processing..."):
-            if not url:
-                # Perform Google search
-                search_results = search_google(objective, objective)
-                if search_results.get("error"):
-                    st.error(f"Error in Google search: {search_results['error']}")
-                    return
-                url = search_results["results"][0]["link"] if search_results["results"] else None
-                if not url:
-                    st.warning("No results found from Google search.")
-                    return
-                st.info(f"Analyzing URL: {url}")
-            
-            # Map URL pages
-            map_results = map_url_pages(url, objective)
-            if map_results.get("error"):
-                st.error(f"Error in mapping URL: {map_results['error']}")
-                return
-            
-            # Use the first result from mapping for scraping
-            url_to_scrape = map_results["results"][0] if map_results["results"] else url
-            st.info(f"Scraping URL: {url_to_scrape}")
-            
             # Scrape URL
-            scrape_results = scrape_url(url_to_scrape, objective)
+            scrape_results = scrape_url(url, objective)
             if scrape_results.get("error"):
                 st.error(f"Error in scraping URL: {scrape_results['error']}")
+                return
+            
+            if not scrape_results.get("results"):
+                st.error("No content was scraped from the URL.")
                 return
             
             # Analyze content
