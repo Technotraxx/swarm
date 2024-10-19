@@ -160,7 +160,7 @@ def main():
                 with st.expander("View Raw SerpAPI Results"):
                     st.json(search_results)
                 
-                url = search_results["results"][0]["link"] if search_results["results"] else None
+                url = search_results.get("organic_results", [{}])[0].get("link")
                 if not url:
                     st.warning("No results found from Google search.")
                     return
