@@ -158,7 +158,7 @@ def analyze_website_content(content: str, objective: str, role: str) -> Dict[str
             return {"objective": objective, "results": None, "error": "No content to analyze"}
         
         task = "Analyze the following website content and extract key insights based on the objective."
-        prompt = f"Objective: {objective}\n\nContent: {content[:4000]}"  # Limit content to 4000 characters to avoid token limits
+        prompt = f"Objective: {objective}\n\nContent: {content[:16000]}"  # Limit content to 4000 characters to avoid token limits
         
         analysis = generate_completion(task, prompt, role)
         
