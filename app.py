@@ -9,6 +9,7 @@ from swarm import Agent
 from swarm.repl import run_demo_loop
 from serpapi import GoogleSearch
 import json
+import pandas as pd
 
 # Define dictionaries for country and language options
 COUNTRIES = {
@@ -173,6 +174,8 @@ def analyze_website_content(content: str, objective: str) -> Dict[str, Any]:
         st.error(f"Error analyzing website content: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
 
+import pandas as pd
+
 def main():
     st.header("Web Data Extraction")
     
@@ -206,16 +209,30 @@ def main():
                 with st.expander(f"View Raw {search_type} Results"):
                     st.json(search_results)
                 
-                # Extract URL based on search type
+                # Extract and display top 5 results
                 if search_type == "Google News":
-                    url = search_results.get("news_results", [{}])[0].get("link")
+                    results = search_results.get("news_results", [])
                 else:
-                    url = search_results.get("organic_results", [{}])[0].get("link")
+                    results = search_results.get("organic_results", [])
                 
-                if not url:
+                if not results:
                     st.warning(f"No results found from {search_type}.")
                     return
-                st.info(f"Analyzing URL from {search_type}: {url}")
+                
+                top_5_results = results[:5]
+                df = pd.DataFrame(top_5_results)
+                
+                if 'title' in df.columns and 'link' in df.columns:
+                    df = df[['title', 'link']]  # Select only title and link columns
+                    st.subheader("Top 5 Search Results")
+                    st.dataframe(df)
+                    
+                    # For now, we'll continue with the first result
+                    url = df['link'].iloc[0]
+                    st.info(f"Analyzing first result: {url}")
+                else:
+                    st.error("Unexpected result format. Unable to display results.")
+                    return
             
             # Rest of the code remains the same
             # Scrape URL
