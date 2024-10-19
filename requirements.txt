@@ -3,6 +3,4 @@ openai
 streamlit
 python-dotenv
 git+https://github.com/openai/swarm.git
-firecrawl
-google
 serpapi
