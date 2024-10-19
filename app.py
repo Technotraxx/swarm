@@ -188,7 +188,6 @@ def main():
     # Input fields
     objective = st.text_input("Enter your web data extraction objective:")
     role = st.text_input("Enter the role for analysis (e.g., data analyst, financial expert):", value="data analyst")
-    url = st.text_input("Enter the URL to analyze (optional):")
     
     # Search type selection
     search_type = st.radio("Select search type:", ("Google Search", "Google News"))
@@ -225,16 +224,19 @@ def main():
                 st.write(f"**{result['title']}**")
                 st.write(f"Source: {result['link']}")
 
+    # Optional: Enter a specific URL
+    specific_url = st.text_input("Enter a specific URL to analyze (optional):")
+
     # Analysis button
     if st.button("Start Analysis"):
         selected_urls = [result['link'] for i, result in enumerate(st.session_state.search_results) if st.session_state.checkbox_states[i]]
         
-        if not selected_urls and not url:
-            st.warning("Please select at least one URL to analyze or enter a specific URL.")
-            return
+        if specific_url:
+            selected_urls.append(specific_url)
         
-        if url:
-            selected_urls = [url]
+        if not selected_urls:
+            st.warning("Please select at least one search result or enter a specific URL to analyze.")
+            return
         
         with st.spinner("Analyzing..."):
             # Scrape all selected URLs
