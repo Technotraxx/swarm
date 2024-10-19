@@ -143,14 +143,26 @@ def main():
     st.header("Web Data Extraction")
     
     objective = st.text_input("Enter your web data extraction objective:")
-    url = st.text_input("Enter the URL to analyze:")
+    url = st.text_input("Enter the URL to analyze (optional):")
     
     if st.button("Start Analysis"):
-        if not objective or not url:
-            st.warning("Please enter both an objective and a URL.")
+        if not objective:
+            st.warning("Please enter an objective.")
             return
         
         with st.spinner("Processing..."):
+            if not url:
+                # Perform Google search
+                search_results = search_google(objective, objective)
+                if search_results.get("error"):
+                    st.error(f"Error in Google search: {search_results['error']}")
+                    return
+                url = search_results["results"][0]["link"] if search_results["results"] else None
+                if not url:
+                    st.warning("No results found from Google search.")
+                    return
+                st.info(f"Analyzing URL from search: {url}")
+            
             # Scrape URL
             scrape_results = scrape_url(url, objective)
             if scrape_results.get("error"):
