@@ -158,6 +158,11 @@ def main():
                 if search_results.get("error"):
                     st.error(f"Error in Google search: {search_results['error']}")
                     return
+                
+                # Display raw SerpAPI results in an expander
+                with st.expander("View Raw SerpAPI Results"):
+                    st.json(search_results)
+                
                 url = search_results["results"][0]["link"] if search_results["results"] else None
                 if not url:
                     st.warning("No results found from Google search.")
