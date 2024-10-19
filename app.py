@@ -77,9 +77,11 @@ def map_url_pages(url: str, objective: str) -> Dict[str, Any]:
         st.info(f"Generated search query: {search_query}")
         map_status = app.map_url(url, params={"search": search_query})
         st.info(f"Firecrawl map_url response: {map_status}")
-        if map_status.get('status') == 'success':
+        
+        if map_status.get('success') == True:  # Changed from 'status' to 'success'
             links = map_status.get('links', [])
             top_link = links[0] if links else None
+            st.success(f"Mapping successful. Found {len(links)} links.")
             return {"objective": objective, "results": [top_link] if top_link else []}
         else:
             error_message = map_status.get('message', 'Unknown error')
@@ -148,8 +150,12 @@ def main():
                 st.error(f"Error in mapping URL: {map_results['error']}")
                 return
             
+            # Use the first result from mapping for scraping
+            url_to_scrape = map_results["results"][0] if map_results["results"] else url
+            st.info(f"Scraping URL: {url_to_scrape}")
+            
             # Scrape URL
-            scrape_results = scrape_url(url, objective)
+            scrape_results = scrape_url(url_to_scrape, objective)
             if scrape_results.get("error"):
                 st.error(f"Error in scraping URL: {scrape_results['error']}")
                 return
