@@ -151,17 +151,16 @@ def scrape_url(url: str, objective: str) -> Dict[str, Any]:
         st.error(f"Error scraping URL: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
 
-def analyze_website_content(content: str, objective: str) -> Dict[str, Any]:
+def analyze_website_content(content: str, objective: str, role: str) -> Dict[str, Any]:
     """Analyze the scraped website content using OpenAI."""
     try:
         if not content:
             return {"objective": objective, "results": None, "error": "No content to analyze"}
         
-        analysis = generate_completion(
-            "data analyst",
-            f"Analyze the following website content and extract key insights based on the objective.",
-            f"Objective: {objective}\n\nContent: {content[:4000]}"  # Limit content to 4000 characters to avoid token limits
-        )
+        task = "Analyze the following website content and extract key insights based on the objective."
+        prompt = f"Objective: {objective}\n\nContent: {content[:4000]}"  # Limit content to 4000 characters to avoid token limits
+        
+        analysis = generate_completion(task, prompt, role)
         
         # Attempt to parse the analysis as JSON, but fall back to string if it fails
         try:
@@ -174,12 +173,12 @@ def analyze_website_content(content: str, objective: str) -> Dict[str, Any]:
         st.error(f"Error analyzing website content: {str(e)}")
         return {"objective": objective, "results": None, "error": str(e)}
 
-import pandas as pd
 
 def main():
     st.header("Web Data Extraction")
     
     objective = st.text_input("Enter your web data extraction objective:")
+    role = st.text_input("Enter the role for analysis (e.g., data analyst, financial expert):", value="data analyst")
     url = st.text_input("Enter the URL to analyze (optional):")
     
     # Add radio button for search type selection
@@ -234,7 +233,6 @@ def main():
                     st.error("Unexpected result format. Unable to display results.")
                     return
             
-            # Rest of the code remains the same
             # Scrape URL
             scrape_results = scrape_url(url, objective)
             if scrape_results.get("error"):
@@ -246,7 +244,7 @@ def main():
                 return
             
             # Analyze content
-            analysis_results = analyze_website_content(scrape_results["results"], objective)
+            analysis_results = analyze_website_content(scrape_results["results"], objective, role)
             if analysis_results.get("error"):
                 st.error(f"Error in analyzing content: {analysis_results['error']}")
                 return
