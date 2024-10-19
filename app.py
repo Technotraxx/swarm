@@ -219,25 +219,30 @@ def main():
                     return
                 
                 top_5_results = results[:5]
-                df = pd.DataFrame(top_5_results)
                 
-                if 'title' in df.columns and 'link' in df.columns:
-                    df = df[['title', 'link']]  # Select only title and link columns
-                    st.subheader("Top 5 Search Results")
+                st.subheader("Top 5 Search Results")
+                
+                # Initialize session state for checkboxes if not exists
+                if 'checkbox_states' not in st.session_state:
+                    st.session_state.checkbox_states = [False] * len(top_5_results)
+                
+                selected_urls = []
+                
+                for i, result in enumerate(top_5_results):
+                    col1, col2 = st.columns([0.1, 0.9])
+                    with col1:
+                        # Use key with index to create unique keys
+                        checked = st.checkbox("", key=f"checkbox_{i}", value=st.session_state.checkbox_states[i])
+                        st.session_state.checkbox_states[i] = checked
+                    with col2:
+                        st.write(f"**{result['title']}**")
+                        st.write(f"Source: {result['link']}")
                     
-                    # Add checkboxes for URL selection
-                    selected_indices = []
-                    for i, row in df.iterrows():
-                        if st.checkbox(f"{row['title']}", key=f"checkbox_{i}"):
-                            selected_indices.append(i)
-                    
-                    if not selected_indices:
-                        st.warning("Please select at least one URL to analyze.")
-                        return
-                    
-                    selected_urls = df.loc[selected_indices, 'link'].tolist()
-                else:
-                    st.error("Unexpected result format. Unable to display results.")
+                    if checked:
+                        selected_urls.append(result['link'])
+                
+                if not selected_urls:
+                    st.warning("Please select at least one URL to analyze.")
                     return
             else:
                 selected_urls = [url]
