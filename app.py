@@ -61,14 +61,14 @@ else:
     st.warning("Please enter all API keys in the sidebar to use the app.")
     st.stop()
 
-def generate_completion(role: str, task: str, content: str) -> str:
+def generate_completion(role: str, prompt: str, content: str = "") -> str:
     """Generate a completion using OpenAI."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",  # or "gpt-4" if you have access
+            model="gpt-4o",  # or "gpt-3.5-turbo" if you prefer
             messages=[
-                {"role": "system", "content": f"You are a {role}. {task}"},
-                {"role": "user", "content": content}
+                {"role": "system", "content": f"You are a {role}. Analyze the content based on the given instructions."},
+                {"role": "user", "content": prompt}
             ]
         )
         return response.choices[0].message.content
@@ -157,6 +157,8 @@ def analyze_website_content(content: str, objective: str, role: str, instruction
         if not content:
             return {"objective": objective, "results": None, "error": "No content to analyze"}
         
+        base_prompt = f"Ziel: {objective}\n\nInhalt: {content[:24000]}"  # Limit content to 8000 characters
+        
         if instruction_option == "default":
             task = "Analyze the following website content from one or more URLs and extract key insights based on the objective. Provide a summary of the main points and any relevant details."
         elif instruction_option == "german":
@@ -166,9 +168,9 @@ def analyze_website_content(content: str, objective: str, role: str, instruction
         elif instruction_option == "summary":
             task = "Schreibe für jeden Inhalt der folgenden Websites eine kurze Zusammenfassung. Berücksichtige dabei das gegebene Ziel und stelle sicher, dass jede Zusammenfassung klar der entsprechenden URL zugeordnet ist."
         
-        prompt = f"Ziel: {objective}\n\nInhalt: {content[:8000]}"  # Limit content to 8000 characters
+        full_prompt = f"{task}\n\n{base_prompt}"
         
-        analysis = generate_completion(task, prompt, role)
+        analysis = generate_completion(role, full_prompt, "")
         
         # Attempt to parse the analysis as JSON, but fall back to string if it fails
         try:
