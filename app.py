@@ -10,6 +10,33 @@ from swarm.repl import run_demo_loop
 from serpapi import GoogleSearch
 import json
 
+# Define dictionaries for country and language options
+COUNTRIES = {
+    "United States": "us",
+    "United Kingdom": "uk",
+    "France": "fr",
+    "Germany": "de",
+    "Japan": "jp",
+    "Australia": "au",
+    "Canada": "ca",
+    "India": "in",
+    "Brazil": "br",
+    "Spain": "es"
+}
+
+LANGUAGES = {
+    "English": "en",
+    "Spanish": "es",
+    "French": "fr",
+    "German": "de",
+    "Japanese": "ja",
+    "Portuguese": "pt",
+    "Italian": "it",
+    "Russian": "ru",
+    "Chinese (Simplified)": "zh-CN",
+    "Arabic": "ar"
+}
+
 # Load environment variables
 load_dotenv()
 
@@ -48,19 +75,28 @@ def generate_completion(role: str, task: str, content: str) -> str:
         st.error(f"Error generating completion: {e}")
         return ""
 
-def search_google(query: str, objective: str) -> Dict[str, Any]:
-    """Search Google using SerpAPI."""
+def search_google(query: str, objective: str, search_type: str, country: str, language: str) -> Dict[str, Any]:
+    """Search Google or Google News using SerpAPI."""
     try:
-        st.info(f"Searching Google for: {query}")
-        search = GoogleSearch({
+        st.info(f"Searching {search_type} for: {query}")
+        params = {
             "q": query,
-            "api_key": serp_api_key
-        })
+            "api_key": serp_api_key,
+            "gl": country,
+            "hl": language
+        }
+        
+        if search_type == "Google News":
+            params["engine"] = "google_news"
+        else:
+            params["engine"] = "google"
+        
+        search = GoogleSearch(params)
         results = search.get_dict()
         st.info("Search completed successfully.")
-        return results  # Return the full SerpAPI response
+        return results
     except Exception as e:
-        st.error(f"Error searching Google: {str(e)}")
+        st.error(f"Error searching {search_type}: {str(e)}")
         return {"objective": objective, "results": [], "error": str(e)}
         
 def map_url_pages(url: str, objective: str) -> Dict[str, Any]:
@@ -143,6 +179,16 @@ def main():
     objective = st.text_input("Enter your web data extraction objective:")
     url = st.text_input("Enter the URL to analyze (optional):")
     
+    # Add radio button for search type selection
+    search_type = st.radio("Select search type:", ("Google Search", "Google News"))
+    
+    # Add dropdown menus for country and language selection
+    col1, col2 = st.columns(2)
+    with col1:
+        country = st.selectbox("Select country:", list(COUNTRIES.keys()))
+    with col2:
+        language = st.selectbox("Select language:", list(LANGUAGES.keys()))
+    
     if st.button("Start Analysis"):
         if not objective:
             st.warning("Please enter an objective.")
@@ -150,22 +196,28 @@ def main():
         
         with st.spinner("Processing..."):
             if not url:
-                # Perform Google search
-                search_results = search_google(objective, objective)
+                # Perform search based on selected type, country, and language
+                search_results = search_google(objective, objective, search_type, COUNTRIES[country], LANGUAGES[language])
                 if search_results.get("error"):
-                    st.error(f"Error in Google search: {search_results['error']}")
+                    st.error(f"Error in {search_type}: {search_results['error']}")
                     return
                 
                 # Display raw SerpAPI results in an expander
-                with st.expander("View Raw SerpAPI Results"):
+                with st.expander(f"View Raw {search_type} Results"):
                     st.json(search_results)
                 
-                url = search_results.get("organic_results", [{}])[0].get("link")
+                # Extract URL based on search type
+                if search_type == "Google News":
+                    url = search_results.get("news_results", [{}])[0].get("link")
+                else:
+                    url = search_results.get("organic_results", [{}])[0].get("link")
+                
                 if not url:
-                    st.warning("No results found from Google search.")
+                    st.warning(f"No results found from {search_type}.")
                     return
-                st.info(f"Analyzing URL from search: {url}")
+                st.info(f"Analyzing URL from {search_type}: {url}")
             
+            # Rest of the code remains the same
             # Scrape URL
             scrape_results = scrape_url(url, objective)
             if scrape_results.get("error"):
