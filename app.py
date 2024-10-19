@@ -54,14 +54,11 @@ def search_google(query: str, objective: str) -> Dict[str, Any]:
         st.info(f"Searching Google for: {query}")
         search = GoogleSearch({
             "q": query,
-            "api_key": serp_api_key  # Use the API key from Streamlit input
+            "api_key": serp_api_key
         })
         results = search.get_dict()
-        st.info(f"Raw SerpAPI results: {results}")
-        organic_results = results.get("organic_results", [])
-        if not organic_results:
-            st.warning("No organic results found in the SerpAPI response.")
-        return {"objective": objective, "results": organic_results}
+        st.info("Search completed successfully.")
+        return results  # Return the full SerpAPI response
     except Exception as e:
         st.error(f"Error searching Google: {str(e)}")
         return {"objective": objective, "results": [], "error": str(e)}
