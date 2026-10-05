@@ -1,0 +1,204 @@
+import type { Card, Project } from '../types'
+import type { Data } from '../store'
+import { fmt, inRange, type Range } from './dates'
+import { points } from './game'
+
+export const SCHEMA = 'questdeck/v1'
+
+export function exportJSON(d: Data): string {
+  return JSON.stringify({ schema: SCHEMA, exportedAt: new Date().toISOString(), ...d }, null, 2)
+}
+
+export function parseJSON(text: string): Partial<Data> {
+  const raw = JSON.parse(text)
+  if (!raw || typeof raw !== 'object') throw new Error('Keine gültige JSON-Datei')
+  if (!Array.isArray(raw.cards)) throw new Error('Datei enthält keine Karten (cards)')
+  return {
+    cards: raw.cards,
+    links: Array.isArray(raw.links) ? raw.links : [],
+    projects: Array.isArray(raw.projects) ? raw.projects : [],
+    objectives: Array.isArray(raw.objectives) ? raw.objectives : [],
+    settings: raw.settings,
+    stats: raw.stats,
+  }
+}
+
+/* ---------------- CSV ---------------- */
+
+const CSV_COLS = ['title', 'description', 'status', 'effortHours', 'urgency', 'importance', 'due', 'project', 'tags', 'link'] as const
+
+const esc = (v: unknown) => {
+  const s = v === undefined || v === null ? '' : String(v)
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+export function exportCSV(cards: Card[], projects: Project[]): string {
+  const pname = new Map(projects.map((p) => [p.id, p.name]))
+  const rows = cards.map((c) =>
+    [c.title, c.description, c.status, c.effortHours, c.urgency, c.importance, c.due, c.projectId ? pname.get(c.projectId) : '', c.tags.join('|'), c.link]
+      .map(esc)
+      .join(','),
+  )
+  return [CSV_COLS.join(','), ...rows].join('\n')
+}
+
+/** Minimaler CSV-Parser (Komma oder Semikolon, Anführungszeichen, Zeilenumbrüche in Feldern). */
+export function parseCSV(text: string): Record<string, string>[] {
+  const firstLine = text.split('\n')[0] ?? ''
+  const sep = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ';' : ','
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') (field += '"'), i++
+      else if (ch === '"') quoted = false
+      else field += ch
+    } else if (ch === '"') quoted = true
+    else if (ch === sep) row.push(field), (field = '')
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ''
+    } else field += ch
+  }
+  if (field || row.length) row.push(field), rows.push(row)
+  const [head, ...body] = rows.filter((r) => r.some((x) => x.trim()))
+  if (!head) return []
+  const keys = head.map((h) => h.trim().toLowerCase())
+  return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()])))
+}
+
+const ALIASES: Record<string, string[]> = {
+  title: ['title', 'titel', 'summary', 'name', 'aufgabe', 'task'],
+  description: ['description', 'beschreibung', 'notes', 'notizen'],
+  status: ['status'],
+  effortHours: ['efforthours', 'aufwand', 'effort', 'hours', 'stunden', 'estimate'],
+  urgency: ['urgency', 'dringlichkeit', 'priority', 'priorität'],
+  importance: ['importance', 'wichtigkeit'],
+  due: ['due', 'fällig', 'due date', 'deadline', 'faellig'],
+  project: ['project', 'projekt', 'epic'],
+  tags: ['tags', 'labels'],
+  link: ['link', 'url'],
+}
+
+const pick = (r: Record<string, string>, key: string) => {
+  for (const a of ALIASES[key]) if (r[a] !== undefined && r[a] !== '') return r[a]
+  return undefined
+}
+
+const PRIO: Record<string, number> = { highest: 5, high: 4, medium: 3, low: 2, lowest: 1, hoch: 4, mittel: 3, niedrig: 2 }
+const STATUS: Record<string, Card['status']> = {
+  backlog: 'backlog',
+  'to do': 'hand',
+  todo: 'hand',
+  hand: 'hand',
+  'in progress': 'doing',
+  doing: 'doing',
+  done: 'done',
+  erledigt: 'done',
+}
+
+/** Wandelt CSV-Zeilen (auch Jira-/Trello-Exporte mit ähnlichen Spalten) in Karten-Rohdaten um. */
+export function csvToCards(rows: Record<string, string>[]): (Partial<Card> & { projectName?: string })[] {
+  const num = (v: string | undefined, d: number) => {
+    if (!v) return d
+    const n = Number(v.replace(',', '.'))
+    return Number.isFinite(n) ? n : (PRIO[v.toLowerCase()] ?? d)
+  }
+  const clamp = (n: number) => Math.min(5, Math.max(1, Math.round(n)))
+  return rows
+    .filter((r) => pick(r, 'title'))
+    .map((r) => {
+      const due = pick(r, 'due')
+      const iso = due?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? due?.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/)?.slice(1).reverse().map((x) => x.padStart(2, '0')).join('-')
+      return {
+        title: pick(r, 'title')!,
+        description: pick(r, 'description') ?? '',
+        status: STATUS[(pick(r, 'status') ?? '').toLowerCase()] ?? 'backlog',
+        effortHours: num(pick(r, 'effortHours'), 2),
+        urgency: clamp(num(pick(r, 'urgency'), 3)),
+        importance: clamp(num(pick(r, 'importance'), 3)),
+        due: iso,
+        projectName: pick(r, 'project'),
+        tags: (pick(r, 'tags') ?? '').split(/[|,]/).map((t) => t.trim()).filter(Boolean),
+        link: pick(r, 'link'),
+      }
+    })
+}
+
+/* ---------------- Kalender (ICS) ---------------- */
+
+export function exportICS(cards: Card[], dayStartHour = 9): string {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Questdeck//DE', 'CALSCALE:GREGORIAN']
+  const icsText = (s: string) => s.replace(/[\\;,]/g, (m) => '\\' + m).replace(/\n/g, '\\n')
+  const offsets = new Map<string, number>()
+  for (const c of cards) {
+    if (c.status === 'done') continue
+    for (const s of c.slots) {
+      const used = offsets.get(s.date) ?? 0
+      offsets.set(s.date, used + s.hours)
+      const start = new Date(`${s.date}T00:00:00`)
+      start.setMinutes((dayStartHour + used) * 60)
+      const end = new Date(start.getTime() + s.hours * 3600_000)
+      const f = (d: Date) => fmt(d, "yyyyMMdd'T'HHmmss")
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${c.id}-${s.date}@questdeck`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${f(start)}`,
+        `DTEND:${f(end)}`,
+        `SUMMARY:${icsText(`${c.emoji} ${c.title}`)}`,
+        `DESCRIPTION:${icsText(c.description + (c.link ? `\n${c.link}` : ''))}`,
+        'END:VEVENT',
+      )
+    }
+    if (c.due) {
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${c.id}-due@questdeck`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART;VALUE=DATE:${c.due.replace(/-/g, '')}`,
+        `SUMMARY:${icsText(`🏁 Fällig: ${c.title}`)}`,
+        'END:VEVENT',
+      )
+    }
+  }
+  lines.push('END:VCALENDAR')
+  return lines.join('\r\n')
+}
+
+/* ---------------- Markdown-Standup (z. B. für Slack) ---------------- */
+
+export function standupMarkdown(cards: Card[], range: Range, label: string): string {
+  const done = cards.filter((c) => c.status === 'done' && c.doneAt && inRange(c.doneAt.slice(0, 10), range))
+  const doing = cards.filter((c) => c.status === 'doing')
+  const hand = cards.filter((c) => c.status === 'hand')
+  const line = (c: Card) => `• ${c.emoji} ${c.title} _(${points(c.effortHours)} ◇${c.due ? `, fällig ${fmt(c.due, 'd.M.')}` : ''})_`
+  return [
+    `*Questdeck · ${label}*`,
+    '',
+    `✅ *Erledigt (${done.length})*`,
+    ...done.map(line),
+    '',
+    `▶️ *Im Spiel (${doing.length})*`,
+    ...doing.map(line),
+    '',
+    `🃏 *Auf der Hand (${hand.length})*`,
+    ...hand.map(line),
+  ].join('\n')
+}
+
+export function download(name: string, content: string, type = 'application/json') {
+  const url = URL.createObjectURL(new Blob([content], { type }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}

@@ -1,6 +1,0 @@
-firecrawl-py
-openai
-streamlit
-python-dotenv
-git+https://github.com/openai/swarm.git
-google-search-results
