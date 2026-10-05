@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useCardMap, useStore } from '../store'
 import type { Card, CardStatus, LinkType } from '../types'
 import { TaskCard } from './Card'
+import { ConfirmButton } from './Inline'
 import { EMOJIS, LINK_TYPES, MOTIFS, points, scheduledHours } from '../lib/game'
 import { fmt, today } from '../lib/dates'
 import { blockers } from '../lib/graph'
@@ -74,12 +75,9 @@ export function CardDetail({ id }: { id: string }) {
                 <button onClick={() => st.reopenCard(card.id)}>↩ Wieder öffnen</button>
               )}
               <button onClick={() => st.select(st.duplicateCard(card.id))}>⧉ Duplizieren</button>
-              <button
-                className="danger"
-                onClick={() => confirm(`„${card.title}“ wirklich löschen?`) && st.deleteCard(card.id)}
-              >
+              <ConfirmButton ask="Löschen?" title="Karte löschen" onConfirm={() => st.deleteCard(card.id)}>
                 🗑
-              </button>
+              </ConfirmButton>
             </div>
             {blocking.length > 0 && (
               <div className="callout warn">

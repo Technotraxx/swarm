@@ -4,6 +4,7 @@ import { parseISO } from 'date-fns'
 import { krProgress, useStore } from '../store'
 import type { KeyResult, Objective } from '../types'
 import { DraggableCard, Drop } from '../components/Dnd'
+import { ConfirmButton } from '../components/Inline'
 import { priority } from '../lib/game'
 import { quarterOf } from '../lib/dates'
 
@@ -86,9 +87,9 @@ function ObjectiveCard({ o }: { o: Objective }) {
             {Math.round(total * 100)} % · {linkedProjects.map((p) => `${p.emoji} ${p.name}`).join(' · ') || 'noch kein Projekt'}
           </small>
         </div>
-        <button className="ghost small" onClick={() => confirm('Objective löschen?') && deleteObjective(o.id)}>
+        <ConfirmButton className="ghost small" ask="Löschen?" title="Objective löschen" onConfirm={() => deleteObjective(o.id)}>
           🗑
-        </button>
+        </ConfirmButton>
       </header>
       <ul className="krs">
         {o.keyResults.map((k) => (

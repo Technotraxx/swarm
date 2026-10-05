@@ -5,6 +5,7 @@ import { eachWeekOfInterval, endOfWeek, parseISO } from 'date-fns'
 import { bookedHours, useStore } from '../store'
 import type { Card } from '../types'
 import { DraggableCard, Drop } from '../components/Dnd'
+import { CapacityButton } from '../components/Inline'
 import { capacityFor, daysIn, fmt, horizonRange, iso, today } from '../lib/dates'
 import { priority, unscheduledHours } from '../lib/game'
 import { HourGrid } from './HourGrid'
@@ -84,7 +85,6 @@ export function CalendarView() {
 function Day({ date, compact }: { date: string; compact: boolean }) {
   const cards = useStore((s) => s.cards)
   const settings = useStore((s) => s.settings)
-  const { updateSettings } = useStore.getState()
   const cap = capacityFor(date, settings)
   const booked = bookedHours(cards, date)
   const load = cap ? booked / cap : booked ? 2 : 0
@@ -93,14 +93,6 @@ function Day({ date, compact }: { date: string; compact: boolean }) {
   const isToday = date === today()
   const weekend = [0, 6].includes(parseISO(date).getDay())
 
-  const editCap = () => {
-    const v = prompt(`Kapazität für ${fmt(date, 'EEEE, d. MMMM')} in Stunden (leer = Standard):`, String(cap))
-    if (v === null) return
-    const overrides = { ...settings.capacityOverrides }
-    if (v.trim() === '') delete overrides[date]
-    else overrides[date] = Math.max(0, Number(v.replace(',', '.')) || 0)
-    updateSettings({ capacityOverrides: overrides })
-  }
 
   return (
     <Drop id={`day:${date}`} className={`cal-day ${isToday ? 'today' : ''} ${weekend ? 'weekend' : ''} ${compact ? 'compact' : ''}`}>
@@ -109,9 +101,7 @@ function Day({ date, compact }: { date: string; compact: boolean }) {
           <b>{fmt(date, compact ? 'd' : 'EEE d.')}</b>
           {!compact && <small>{fmt(date, 'MMM')}</small>}
         </div>
-        <button className="cap" onClick={editCap} title="Kapazität anpassen (Urlaub, Meetingtag …)">
-          {booked}/{cap} h
-        </button>
+        <CapacityButton date={date} booked={booked} />
       </div>
       <div className="cap-bar">
         <motion.div

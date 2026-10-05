@@ -4,6 +4,7 @@ import { parseISO } from 'date-fns'
 import { PROJECT_COLORS, projectProgress, useStore } from '../store'
 import { EMOJIS } from '../lib/game'
 import { csvToCards, download, exportCSV, exportICS, exportJSON, parseCSV, parseJSON, standupMarkdown } from '../lib/io'
+import { ConfirmButton } from './Inline'
 import { horizonLabel, horizonRange, today } from '../lib/dates'
 import { dayStartOf } from '../lib/schedule'
 
@@ -102,12 +103,9 @@ export function ProjectEditor({ id }: { id: string }) {
           {prog.count} Karten · {prog.done}/{prog.total} h erledigt
         </p>
         <div className="row-between">
-          <button
-            className="danger"
-            onClick={() => confirm(`Projekt „${project.name}“ löschen? Die Karten bleiben erhalten.`) && st.deleteProject(id)}
-          >
+          <ConfirmButton ask="Löschen? Karten bleiben" onConfirm={() => st.deleteProject(id)}>
             Projekt löschen
-          </button>
+          </ConfirmButton>
           <button className="primary" onClick={close}>
             Fertig
           </button>
@@ -247,12 +245,12 @@ export function IOModal() {
       </section>
 
       <div className="row-between">
-        <button className="ghost" onClick={() => confirm('Beispieldaten laden? Deine Karten werden ersetzt.') && st.resetDemo()}>
+        <ConfirmButton className="ghost" ask="Ersetzt deine Karten – sicher?" onConfirm={() => st.resetDemo()}>
           🎲 Beispieldeck laden
-        </button>
-        <button className="danger" onClick={() => confirm('Wirklich alles löschen?') && st.clearAll()}>
+        </ConfirmButton>
+        <ConfirmButton ask="Wirklich alles löschen?" onConfirm={() => st.clearAll()}>
           Alles leeren
-        </button>
+        </ConfirmButton>
       </div>
     </Modal>
   )

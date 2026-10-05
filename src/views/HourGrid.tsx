@@ -4,6 +4,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { useStore } from '../store'
 import type { Card } from '../types'
 import { Drop } from '../components/Dnd'
+import { CapacityButton } from '../components/Inline'
 import { capacityFor, fmt, today } from '../lib/dates'
 import { blocksForDay, dayStartOf, fmtHour, lanes, type Block } from '../lib/schedule'
 
@@ -56,29 +57,19 @@ export function HourGrid({ days }: { days: string[] }) {
 function DayHead({ date, blocks }: { date: string; blocks: Block[] }) {
   const cards = useStore((s) => s.cards)
   const settings = useStore((s) => s.settings)
-  const { drawHand, updateSettings } = useStore.getState()
+  const { drawHand } = useStore.getState()
   const cap = capacityFor(date, settings)
   const booked = blocks.filter((b) => cards.find((c) => c.id === b.cardId)?.status !== 'done').reduce((s, b) => s + b.hours, 0)
   const load = cap ? booked / cap : booked ? 2 : 0
   const due = cards.filter((c) => c.due === date && c.status !== 'done')
   const past = date < today()
 
-  const editCap = () => {
-    const v = prompt(`Kapazität für ${fmt(date, 'EEEE, d. MMMM')} in Stunden (leer = Standard):`, String(cap))
-    if (v === null) return
-    const overrides = { ...settings.capacityOverrides }
-    if (v.trim() === '') delete overrides[date]
-    else overrides[date] = Math.max(0, Number(v.replace(',', '.')) || 0)
-    updateSettings({ capacityOverrides: overrides })
-  }
 
   return (
     <Drop id={`day:${date}`} className={`hg-head ${date === today() ? 'today' : ''}`}>
       <div className="row-between">
         <b>{fmt(date, 'EEE d.')}</b>
-        <button className="cap" onClick={editCap} title="Kapazität anpassen (Urlaub, Meetingtag …)">
-          {booked}/{cap} h
-        </button>
+        <CapacityButton date={date} booked={booked} />
       </div>
       <div className="cap-bar">
         <motion.div

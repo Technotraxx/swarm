@@ -2799,3 +2799,18 @@ h4 {
     grid-template-columns: 40px repeat(var(--cols), minmax(110px, 1fr));
   }
 }
+button.armed {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+  animation: pulse 1s infinite;
+}
+.cap.custom {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+}
+.cap-input {
+  width: 64px;
+  padding: 1px 6px;
+  font-size: 11px;
+  border-radius: 99px;
+}
