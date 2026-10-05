@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   DndContext,
@@ -27,6 +27,7 @@ import { RoadmapView } from './views/RoadmapView'
 import { GraphView } from './views/GraphView'
 import { CalendarView } from './views/CalendarView'
 import { OkrView } from './views/OkrView'
+import { HOUR_PX } from './views/HourGrid'
 import { iso, shiftCursor, today } from './lib/dates'
 
 const VIEWS: Record<ViewId, () => React.ReactElement> = {
@@ -55,7 +56,9 @@ export default function App() {
   const showHelp = useStore((s) => s.showHelp)
   const showIO = useStore((s) => s.showIO)
   const theme = useStore((s) => s.settings.theme)
-  const [active, setActive] = useState<Card | null>(null)
+  const [active, setActive] = useState<{ card: Card; slot: boolean } | null>(null)
+  // Wo wurde ein Zeitblock gegriffen? (in Stunden ab Blockanfang) – damit er beim Ablegen nicht springt
+  const grab = useRef(0)
   const [prevDepth, setPrevDepth] = useState(DEPTH[view])
   const dir = DEPTH[view] >= prevDepth ? 1 : -1
 
@@ -74,7 +77,14 @@ export default function App() {
 
   useKeyboard()
 
-  const onStart = (e: DragStartEvent) => setActive((e.active.data.current?.card as Card) ?? null)
+  const onStart = (e: DragStartEvent) => {
+    const card = e.active.data.current?.card as Card | undefined
+    const slot = e.active.data.current?.date !== undefined
+    const rect = e.active.rect.current.initial
+    const y = (e.activatorEvent as PointerEvent | null)?.clientY
+    grab.current = slot && rect && y !== undefined ? Math.floor(((y - rect.top) / HOUR_PX) * 2) / 2 : 0
+    setActive(card ? { card, slot } : null)
+  }
 
   const onEnd = (e: DragEndEvent) => {
     setActive(null)
@@ -99,13 +109,16 @@ export default function App() {
         break
       }
       case 'day': {
-        if (fromDate) {
-          if (fromDate === target) return
-          // Zeitblock verschieben
-          const hours = card.slots.find((s) => s.date === fromDate)?.hours ?? 1
-          st.setSlot(card.id, fromDate, 0)
-          st.schedule(card.id, target, hours)
-        } else st.schedule(card.id, target)
+        if (fromDate) st.moveSlot(card.id, fromDate, target)
+        else st.schedule(card.id, target)
+        break
+      }
+      case 'hour': {
+        // target = "yyyy-MM-dd:9.5"
+        const [date, h] = [target.slice(0, 10), Number(target.slice(11))]
+        const start = Math.max(0, h - grab.current)
+        if (fromDate) st.moveSlot(card.id, fromDate, date, start)
+        else st.schedule(card.id, date, undefined, start)
         break
       }
       case 'project': {
@@ -150,9 +163,13 @@ export default function App() {
       </div>
 
       <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' }}>
-        {active ? (
+        {active?.slot ? (
+          <div className="drag-overlay slot-overlay">
+            {active.card.emoji} {active.card.title}
+          </div>
+        ) : active ? (
           <div className="drag-overlay">
-            <TaskCard card={active} size={view === 'board' ? 'md' : 'sm'} tilt={false} />
+            <TaskCard card={active.card} size={view === 'board' ? 'md' : 'sm'} tilt={false} />
           </div>
         ) : null}
       </DragOverlay>
@@ -189,6 +206,9 @@ function useKeyboard() {
           window.dispatchEvent(new Event('questdeck:capture'))
           break
         case 'd':
+          st.drawHand()
+          break
+        case 'D':
           st.drawCard()
           break
         case '?':

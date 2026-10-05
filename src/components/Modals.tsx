@@ -5,6 +5,7 @@ import { PROJECT_COLORS, projectProgress, useStore } from '../store'
 import { EMOJIS } from '../lib/game'
 import { csvToCards, download, exportCSV, exportICS, exportJSON, parseCSV, parseJSON, standupMarkdown } from '../lib/io'
 import { horizonLabel, horizonRange, today } from '../lib/dates'
+import { dayStartOf } from '../lib/schedule'
 
 export function Modal({ onClose, children, wide }: { onClose: () => void; children: ReactNode; wide?: boolean }) {
   return (
@@ -184,7 +185,7 @@ export function IOModal() {
           <h4>Export</h4>
           <button onClick={() => download(`questdeck-${stamp}.json`, exportJSON(data()))}>💾 Komplettes Deck (JSON)</button>
           <button onClick={() => download(`questdeck-${stamp}.csv`, exportCSV(st.cards, st.projects), 'text/csv')}>📄 Karten als CSV</button>
-          <button onClick={() => download(`questdeck-${stamp}.ics`, exportICS(useStore.getState().cards), 'text/calendar')}>
+          <button onClick={() => download(`questdeck-${stamp}.ics`, exportICS(useStore.getState().cards, dayStartOf(settings)), 'text/calendar')}>
             📅 Zeitblöcke & Fristen (ICS)
           </button>
           <button onClick={copyStandup}>💬 Standup für Slack kopieren</button>
@@ -299,7 +300,7 @@ export function HelpModal() {
           <h4>Tastenkürzel</h4>
           <ul className="keys">
             <li><kbd>1</kbd>–<kbd>6</kbd> Ansichten</li>
-            <li><kbd>D</kbd> Karte ziehen</li>
+            <li><kbd>D</kbd> Hand für heute ziehen · <kbd>⇧ D</kbd> eine Karte</li>
             <li><kbd>[</kbd> <kbd>]</kbd> Zeitraum zurück/vor</li>
             <li><kbd>T</kbd> heute</li>
             <li><kbd>Esc</kbd> schließen</li>
@@ -311,7 +312,9 @@ export function HelpModal() {
             <li>Karten auf die <b>Ablage</b> ziehen (oder ✓) = erledigt → XP & Serie.</li>
             <li><b>Mana</b> oben rechts = Aufwand, der Rahmen zeigt die Seltenheit.</li>
             <li>Im <b>Netz</b> vom ● am Kartenrand auf eine andere Karte ziehen = verbinden.</li>
-            <li>In <b>Kapazität</b> Karten auf Tage ziehen, um Zeit zu blocken.</li>
+            <li><b>Hand ziehen</b> füllt heute nach Priorität bis zur Kapazität, Blockiertes bleibt liegen.</li>
+            <li>In <b>Kapazität</b> Karten auf eine Uhrzeit ziehen, um Zeit zu blocken; unten am Block ziehen = Dauer.</li>
+            <li>Karten, die lange niemand anfasst, <b>altern</b> (⏳ ab 7, verstaubt ab 14, 🕸️ ab 28 Tagen) und rutschen in der Priorität nach oben.</li>
           </ul>
         </section>
       </div>

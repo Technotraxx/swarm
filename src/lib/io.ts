@@ -2,6 +2,7 @@ import type { Card, Project } from '../types'
 import type { Data } from '../store'
 import { fmt, inRange, type Range } from './dates'
 import { points } from './game'
+import { blocksForDay } from './schedule'
 
 export const SCHEMA = 'questdeck/v1'
 
@@ -133,23 +134,21 @@ export function csvToCards(rows: Record<string, string>[]): (Partial<Card> & { p
 
 /* ---------------- Kalender (ICS) ---------------- */
 
-export function exportICS(cards: Card[], dayStartHour = 9): string {
+export function exportICS(cards: Card[], dayStart = 9): string {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Questdeck//DE', 'CALSCALE:GREGORIAN']
   const icsText = (s: string) => s.replace(/[\\;,]/g, (m) => '\\' + m).replace(/\n/g, '\\n')
-  const offsets = new Map<string, number>()
-  for (const c of cards) {
-    if (c.status === 'done') continue
-    for (const s of c.slots) {
-      const used = offsets.get(s.date) ?? 0
-      offsets.set(s.date, used + s.hours)
-      const start = new Date(`${s.date}T00:00:00`)
-      start.setMinutes((dayStartHour + used) * 60)
-      const end = new Date(start.getTime() + s.hours * 3600_000)
-      const f = (d: Date) => fmt(d, "yyyyMMdd'T'HHmmss")
+  const f = (d: Date) => fmt(d, "yyyyMMdd'T'HHmmss")
+  const dates = new Set(cards.flatMap((c) => c.slots.map((s) => s.date)))
+  for (const date of dates) {
+    for (const b of blocksForDay(cards, date, dayStart, false)) {
+      const c = cards.find((x) => x.id === b.cardId)!
+      const start = new Date(`${date}T00:00:00`)
+      start.setMinutes(Math.round(b.start * 60))
+      const end = new Date(start.getTime() + b.hours * 3600_000)
       lines.push(
         'BEGIN:VEVENT',
-        `UID:${c.id}-${s.date}@questdeck`,
+        `UID:${c.id}-${date}@questdeck`,
         `DTSTAMP:${stamp}`,
         `DTSTART:${f(start)}`,
         `DTEND:${f(end)}`,
@@ -158,6 +157,9 @@ export function exportICS(cards: Card[], dayStartHour = 9): string {
         'END:VEVENT',
       )
     }
+  }
+  for (const c of cards) {
+    if (c.status === 'done') continue
     if (c.due) {
       lines.push(
         'BEGIN:VEVENT',

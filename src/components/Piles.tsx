@@ -52,7 +52,8 @@ export function DiscardPile() {
 /** Ziehstapel unten links: „Karte ziehen“ holt die wichtigste Karte aus dem Backlog auf die Hand. */
 export function DrawPile() {
   const count = useStore((s) => s.cards.filter((c) => c.status === 'backlog').length)
-  const draw = useStore((s) => s.drawCard)
+  const drawHand = useStore((s) => s.drawHand)
+  const drawOne = useStore((s) => s.drawCard)
   const [flip, setFlip] = useState(0)
   return (
     <Drop id="draw" className="pile pile-draw">
@@ -60,8 +61,8 @@ export function DrawPile() {
         className="pile-stack"
         whileHover={{ y: -4 }}
         whileTap={{ scale: 0.95 }}
-        onClick={() => (draw(), setFlip((f) => f + 1))}
-        title="Karte ziehen (D) – die wichtigste Karte aus dem Stapel"
+        onClick={(e) => (e.shiftKey ? drawOne() : drawHand(), setFlip((f) => f + 1))}
+        title="Hand ziehen (D): füllt heute bis zur Kapazität, Blockiertes bleibt liegen · ⇧-Klick: nur eine Karte"
       >
         {Array.from({ length: Math.min(4, Math.max(1, count)) }).map((_, i) => (
           <div key={i} className="pile-card" style={{ transform: `translate(${i * 1.5}px, ${-i * 2.5}px)` }}>
@@ -83,7 +84,7 @@ export function DrawPile() {
         </AnimatePresence>
         <span className="pile-count">{count}</span>
       </motion.div>
-      <div className="pile-label">Stapel · klicken = Karte ziehen</div>
+      <div className="pile-label">Stapel · klicken = Hand für heute ziehen</div>
     </Drop>
   )
 }

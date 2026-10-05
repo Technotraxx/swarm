@@ -5,7 +5,7 @@ Produktivität als Kartenspiel: Jede Aufgabe ist eine Sammelkarte mit Motiv, Man
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # Logik-Tests (Critical Path, Schnell-Eingabe, Zeiträume, CSV)
+npm test           # Logik-Tests (Critical Path, Planung, Alterung, Schnell-Eingabe, Zeiträume, CSV)
 npm run build
 ```
 
@@ -15,11 +15,11 @@ Alle Daten liegen lokal im Browser (localStorage). Beim ersten Start gibt es ein
 
 | | Ansicht | Wozu |
 |---|---|---|
-| **Ebene** | 🃏 **Task** | Spieltisch mit *Stapel* (Backlog), *Hand* (vorgenommen), *Im Spiel* (in Arbeit). Unten links der Ziehstapel („Karte ziehen“ holt die wichtigste Karte), unten rechts die Ablage. |
+| **Ebene** | 🃏 **Task** | Spieltisch mit *Stapel* (Backlog), *Hand* (vorgenommen), *Im Spiel* (in Arbeit). **Hand ziehen** (Ziehstapel unten links oder `D`) füllt heute nach Priorität bis zur Kapazität und lässt Blockiertes liegen. Unten rechts die Ablage. |
 | | 🗂️ **Projekt** | Jedes Projekt ist ein Deck mit Fortschritt und KR-Bezug. Karten aufs Deck ziehen = zuordnen. |
 | | 🗺️ **Roadmap** | Projekte als Balken auf der Zeitachse (ziehen = verschieben, Ränder = Dauer), Karten mit Fälligkeit als Meilensteine, gruppiert nach Objective. |
 | **Linse** | 🕸️ **Netz** | Karten frei anordnen und verbinden: Abhängigkeit, Blocker, Happy Path, Verzögerung, Entscheidung, Bezug. Linsen für **Critical Path**, **Blocker** und **RACI** pro Person. |
-| | 📅 **Kapazität** | Persönliche Kapazitätsplanung: Karten auf Tage ziehen = Zeit blocken, Auslastung pro Tag, Kapazität pro Wochentag und Tag (Urlaub, Meetingtag). Quartal/Jahr zeigen eine Wochen-Heatmap. |
+| | 📅 **Kapazität** | Persönliche Kapazitätsplanung. Tag/Woche: **Stundenraster** – Karten auf eine Uhrzeit ziehen, Blöcke verschieben, unten am Block die Dauer ziehen, „füllen“ plant einen Tag automatisch. Sprint/Monat als Tagesliste, Quartal/Jahr als Wochen-Heatmap. Kapazität und Arbeitsbeginn pro Wochentag bzw. Tag (Urlaub, Meetingtag). |
 | | 🎯 **OKR** | Objectives & Key Results; Fortschritt aus erledigten Karten (nach Aufwand), optional kombiniert mit manuellem Messwert. |
 
 Der **Zeitraum** (Tag · Woche · Sprint · Monat · Quartal · Jahr) oben rechts steuert Kalender, Roadmap, Ablage-Rückblick und die Auslastungsanzeige. Sprints sind 2 Wochen ab einem einstellbaren Anker-Montag.
@@ -33,13 +33,17 @@ Angebot schreiben #launch !4 ^5 ~2h @fr +sales https://…
 `#projekt` (wird angelegt, wenn neu) · `!1–!5` / `!!!` Dringlichkeit · `^1–^5` Wichtigkeit · `~30m ~2h ~1d` Aufwand · `@heute @morgen @fr @12.10.` Fälligkeit · `+tag` · Links werden erkannt.
 Passt der Text zu einer bestehenden Karte, hängt `Tab` ihn als ToDo an diese Karte an.
 
-Tastenkürzel: `1–6` Ansichten · `D` Karte ziehen · `[` `]` Zeitraum · `T` heute · `?` Hilfe · `Esc` schließen.
+Tastenkürzel: `1–6` Ansichten · `D` Hand für heute ziehen · `⇧D` eine Karte ziehen · `[` `]` Zeitraum · `T` heute · `?` Hilfe · `Esc` schließen.
+
+## Karten altern
+
+Karten im Stapel oder auf der Hand, die niemand anfasst, setzen Staub an: ⏳ *liegt* ab 7 Tagen, *verstaubt* ab 14, 🕸️ *vergessen* ab 28. Sie werden sepiafarben und rutschen in der Priorität langsam nach oben. Verschieben, Planen, ToDos oder Notizen setzen die Uhr zurück.
 
 ## Import & Export (⇅)
 
 - **JSON** – komplettes Deck (zusammenführen oder ersetzen)
 - **CSV** – Import/Export; Spaltennamen von Jira/Trello (Summary, Priority, Due Date, Epic …) werden erkannt
-- **ICS** – Zeitblöcke und Fristen für jeden Kalender
+- **ICS** – Zeitblöcke (mit Uhrzeit) und Fristen für jeden Kalender
 - **Standup** – Markdown-Zusammenfassung des Zeitraums zum Einfügen in Slack
 
 ## Aufbau
@@ -49,9 +53,9 @@ src/
   types.ts            Datenmodell (Card, Link, Project, Objective, Settings)
   store.ts            Zustand-Store inkl. Persistenz und aller Aktionen
   seed.ts             Beispieldeck
-  lib/                reine Logik: Zeiträume, Spielwerte, Graph (Critical Path), Schnell-Eingabe, Import/Export
+  lib/                reine Logik: Zeiträume, Spielwerte, Graph (Critical Path), Planung (Hand ziehen, Zeitfenster, Alterung), Schnell-Eingabe, Import/Export
   components/         Karte (TCG), Drag & Drop, Stapel & Flug-Effekt, Detail-Drawer, Modals
-  views/              Board, Projekte, Roadmap, Netz, Kapazität, OKR
+  views/              Board, Projekte, Roadmap, Netz, Kapazität (inkl. Stundenraster), OKR
 ```
 
 React 19 · TypeScript · Vite · framer-motion (Übergänge) · dnd-kit (Drag & Drop) · zustand · date-fns

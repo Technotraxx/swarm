@@ -3,6 +3,7 @@ import type { Card as CardT } from '../types'
 import { useStore } from '../store'
 import { MOTIFS, RARITY, checklistProgress, initials, personColor, points, rarity } from '../lib/game'
 import { daysUntil, fmt } from '../lib/dates'
+import { AGE_LABEL, cardAge } from '../lib/schedule'
 
 export type CardSize = 'sm' | 'md' | 'lg'
 
@@ -37,6 +38,7 @@ export const TaskCard = memo(function TaskCard({
   const rar = rarity(card)
   const progress = checklistProgress(card)
   const due = card.due ? daysUntil(card.due) : undefined
+  const { age, days } = cardAge(card)
   const people = [...new Set([...card.raci.r, card.raci.a].filter(Boolean))]
 
   const onMove = (e: React.PointerEvent) => {
@@ -58,7 +60,7 @@ export const TaskCard = memo(function TaskCard({
     <div
       ref={ref}
       data-card-id={card.id}
-      className={`tcg tcg-${size} rar-${rar} ${card.status === 'done' ? 'is-done' : ''} ${blocked ? 'is-blocked' : ''} ${critical ? 'is-critical' : ''} ${dim ? 'is-dim' : ''} ${className}`}
+      className={`tcg tcg-${size} rar-${rar} ${card.status === 'done' ? 'is-done' : ''} ${blocked ? 'is-blocked' : ''} ${critical ? 'is-critical' : ''} ${dim ? 'is-dim' : ''} age-${age} ${className}`}
       style={{ '--rar': RARITY[rar].color, '--proj': project?.color ?? 'transparent', ...style } as CSSProperties}
       onPointerMove={onMove}
       onPointerLeave={onLeave}
@@ -98,6 +100,11 @@ export const TaskCard = memo(function TaskCard({
             >
               🔗
             </a>
+          )}
+          {age > 0 && (
+            <span className="tcg-age" title={`Seit ${days} Tagen nicht angefasst – zieh sie, plane sie oder wirf sie weg`}>
+              {age === 3 ? '🕸️' : '⏳'} {AGE_LABEL[age]} · {days} T
+            </span>
           )}
           {blocked && <span className="tcg-chain" title="Blockiert durch offene Abhängigkeit">⛓️</span>}
         </div>

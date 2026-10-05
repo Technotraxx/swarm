@@ -28,6 +28,8 @@ export interface LogEntry {
 export interface Slot {
   date: string // yyyy-MM-dd
   hours: number
+  /** Startzeit in Stunden (z. B. 9.5 = 9:30). Fehlt sie, wird der Block in die erste freie Lücke gelegt. */
+  start?: number
 }
 
 export interface Raci {
@@ -62,6 +64,8 @@ export interface Card {
   /** Position im Abhängigkeits-Netz */
   pos?: { x: number; y: number }
   createdAt: string
+  /** Zuletzt bewusst angefasst (verschoben, geplant, ToDo/Notiz) – Grundlage für die Alterung */
+  touchedAt?: string
   startedAt?: string
   doneAt?: string
   order: number
@@ -112,6 +116,8 @@ export interface Settings {
   /** Abweichende Kapazität pro Datum (Urlaub, Meetingtag …) */
   capacityOverrides: Record<string, number>
   sprintAnchor: string // Startdatum eines Sprints, von dem aus 2-Wochen-Sprints gezählt werden
+  /** Arbeitsbeginn in Stunden; die Tageskapazität zählt ab hier */
+  dayStart?: number
   theme: 'dark' | 'light'
   sound: boolean
 }

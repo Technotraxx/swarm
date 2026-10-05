@@ -33,6 +33,10 @@ export function rarity(card: Pick<Card, 'effortHours' | 'importance'>): Rarity {
 /** Wie dringend sollte ich diese Karte jetzt ziehen? Höher = früher. */
 export function priority(card: Card): number {
   let s = (card.urgency * 2 + card.importance * 1.5) / Math.sqrt(Math.max(0.5, card.effortHours))
+  if (card.status === 'backlog' || card.status === 'hand') {
+    const idle = (Date.now() - new Date(card.touchedAt ?? card.createdAt).getTime()) / 86_400_000
+    if (idle >= 7) s += Math.min(3, idle / 14)
+  }
   if (card.due) {
     const d = daysUntil(card.due)
     if (d < 0) s += 6

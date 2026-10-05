@@ -97,7 +97,7 @@ export function demoData(): Data {
       due: d(1),
       decider: 'Mara Klein',
       raci: raci(['Ich'], 'Mara Klein', ['Finance'], ['Sales']),
-      slots: [{ date: d(0), hours: 2 }],
+      slots: [{ date: d(0), hours: 2, start: 9 }],
       checklist: [
         { id: 'x1', text: 'Wettbewerber-Preise sammeln', done: true, createdAt: d(-2) },
         { id: 'x2', text: 'Szenarien rechnen', done: false, createdAt: d(-1) },
@@ -118,7 +118,7 @@ export function demoData(): Data {
       due: d(4),
       link: 'https://example.com/docs/landingpage',
       raci: raci(['Ich'], 'Ich', ['Design'], []),
-      slots: [{ date: d(1), hours: 3 }],
+      slots: [{ date: d(1), hours: 3, start: 10 }],
     }),
     card({
       id: 'c3',
@@ -149,6 +149,7 @@ export function demoData(): Data {
     card({
       id: 'c5',
       title: 'Hero-Visual gestalten',
+      createdAt: new Date(Date.now() - 9 * 86400000).toISOString(),
       emoji: '🎨',
       motif: 6,
       effortHours: 5,
@@ -161,6 +162,7 @@ export function demoData(): Data {
     card({
       id: 'c6',
       title: 'Tracking & Analytics',
+      createdAt: new Date(Date.now() - 31 * 86400000).toISOString(),
       emoji: '📊',
       motif: 10,
       effortHours: 4,
@@ -196,6 +198,7 @@ export function demoData(): Data {
     card({
       id: 'c9',
       title: 'Security-Review',
+      createdAt: new Date(Date.now() - 16 * 86400000).toISOString(),
       emoji: '🛡️',
       motif: 7,
       effortHours: 8,
@@ -239,6 +242,7 @@ export function demoData(): Data {
       capacity: [6, 6, 6, 6, 5, 0, 0],
       capacityOverrides: {},
       sprintAnchor: '2026-01-05',
+      dayStart: 9,
       theme: 'dark',
       sound: true,
     },

@@ -77,6 +77,15 @@ export function BoardView() {
                   <h3>{col.title}</h3>
                   <small>{col.hint}</small>
                 </div>
+                {col.id === 'hand' && (
+                  <button
+                    className="draw-hand"
+                    onClick={() => useStore.getState().drawHand()}
+                    title="Füllt heute nach Priorität bis zur Kapazität – blockierte Karten bleiben liegen (D)"
+                  >
+                    🖐️ Hand ziehen
+                  </button>
+                )}
                 <span className="column-count">
                   {list.length} · {hours} h
                 </span>

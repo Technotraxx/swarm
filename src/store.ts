@@ -18,6 +18,7 @@ import type {
 import { capacityFor, iso, today } from './lib/dates'
 import { priority, unscheduledHours, xpFor } from './lib/game'
 import { createsCycle } from './lib/graph'
+import { blocksForDay, dayStartOf, firstFree, fmtHour, planHand } from './lib/schedule'
 import { play } from './lib/sound'
 import { demoData } from './seed'
 import { addDays, parseISO } from 'date-fns'
@@ -80,13 +81,15 @@ interface Actions {
   completeCard: (id: ID, from?: DOMRect | Flight['from']) => void
   reopenCard: (id: ID) => void
   drawCard: () => void
+  drawHand: (date?: string) => void
 
   addChecklist: (id: ID, text: string) => void
   toggleChecklist: (id: ID, itemId: ID) => void
   removeChecklist: (id: ID, itemId: ID) => void
   addLog: (id: ID, text: string) => void
 
-  schedule: (id: ID, date: string, hours?: number) => void
+  schedule: (id: ID, date: string, hours?: number, start?: number) => void
+  moveSlot: (id: ID, fromDate: string, toDate: string, start?: number) => void
   setSlot: (id: ID, date: string, hours: number) => void
 
   addLink: (from: ID, to: ID, type: LinkType) => boolean
@@ -121,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   capacity: [6, 6, 6, 6, 5, 0, 0],
   capacityOverrides: {},
   sprintAnchor: '2026-01-05',
+  dayStart: 9,
   theme: 'dark',
   sound: true,
 }
@@ -212,6 +216,7 @@ export const useStore = create<State>()(
               ...c,
               status,
               order: Date.now(),
+              touchedAt: now(),
               startedAt: status === 'doing' ? (c.startedAt ?? now()) : c.startedAt,
               doneAt: undefined,
             })),
@@ -269,14 +274,51 @@ export const useStore = create<State>()(
           }
           const best = candidates.sort((a, b) => priority(b) - priority(a))[0]
           sfx('draw')
-          set((s) => ({ cards: mapCard(s.cards, best.id, (c) => ({ ...c, status: 'hand', order: Date.now() })) }))
+          set((s) => ({
+            cards: mapCard(s.cards, best.id, (c) => ({ ...c, status: 'hand', order: Date.now(), touchedAt: now() })),
+          }))
           get().toast({ icon: '🃏', text: `Gezogen: „${best.title}“` })
+        },
+        drawHand: (date = today()) => {
+          const s = get()
+          const plan = planHand(s.cards, s.links, date, s.settings)
+          const blocked = plan.skippedBlocked ? ` · ${plan.skippedBlocked} blockierte bleiben liegen` : ''
+          if (!plan.picks.length) {
+            get().toast({
+              icon: '🂠',
+              text: plan.free < 0.5 ? `Der Tag ist schon voll – gut geplant!${blocked}` : `Nichts mehr zu ziehen${blocked}`,
+            })
+            return
+          }
+          const byId = new Map(plan.picks.map((p) => [p.cardId, p]))
+          sfx('draw')
+          set({
+            cards: s.cards.map((c) => {
+              const p = byId.get(c.id)
+              if (!p) return c
+              return {
+                ...c,
+                status: c.status === 'backlog' ? 'hand' : c.status,
+                order: Date.now(),
+                touchedAt: now(),
+                slots: [...c.slots, { date, hours: p.hours, start: p.start }].sort((a, b) => a.date.localeCompare(b.date)),
+              }
+            }),
+          })
+          const hours = plan.picks.reduce((a, p) => a + p.hours, 0)
+          get().toast({
+            icon: '🖐️',
+            text: `Hand gezogen: ${plan.picks.length} Karte${plan.picks.length > 1 ? 'n' : ''}, ${hours} h ab ${fmtHour(
+              Math.min(...plan.picks.map((p) => p.start)),
+            )} Uhr verplant${blocked}`,
+          })
         },
 
         addChecklist: (id, text) =>
           set((s) => ({
             cards: mapCard(s.cards, id, (c) => ({
               ...c,
+              touchedAt: now(),
               checklist: [...c.checklist, { id: uid(), text, done: false, createdAt: now() }],
             })),
           })),
@@ -284,6 +326,7 @@ export const useStore = create<State>()(
           set((s) => ({
             cards: mapCard(s.cards, id, (c) => ({
               ...c,
+              touchedAt: now(),
               checklist: c.checklist.map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)),
             })),
           })),
@@ -292,31 +335,59 @@ export const useStore = create<State>()(
             cards: mapCard(s.cards, id, (c) => ({ ...c, checklist: c.checklist.filter((i) => i.id !== itemId) })),
           })),
         addLog: (id, text) =>
-          set((s) => ({ cards: mapCard(s.cards, id, (c) => ({ ...c, log: [{ id: uid(), text, at: now() }, ...c.log] })) })),
+          set((s) => ({ cards: mapCard(s.cards, id, (c) => ({ ...c, touchedAt: now(), log: [{ id: uid(), text, at: now() }, ...c.log] })) })),
 
-        schedule: (id, date, hours) => {
+        schedule: (id, date, hours, start) => {
           const s = get()
           const card = s.cards.find((c) => c.id === id)
           if (!card) return
-          const booked = s.cards.reduce(
-            (sum, c) => sum + c.slots.filter((x) => x.date === date && c.id !== id).reduce((a, x) => a + x.hours, 0),
-            0,
+          const dayStart = dayStartOf(s.settings)
+          const others = blocksForDay(
+            s.cards.map((c) => (c.id === id ? { ...c, slots: c.slots.filter((x) => x.date !== date) } : c)),
+            date,
+            dayStart,
+            false,
           )
+          const booked = others.reduce((a, b) => a + b.hours, 0)
           const free = Math.max(0, capacityFor(date, s.settings) - booked)
           const rest = unscheduledHours(card) || Math.min(2, card.effortHours)
           const h = hours ?? Math.max(0.5, Math.min(rest, free || rest))
           const existing = card.slots.find((x) => x.date === date)
           const slots: Slot[] = existing
-            ? card.slots.map((x) => (x.date === date ? { ...x, hours: x.hours + h } : x))
-            : [...card.slots, { date, hours: h }]
+            ? card.slots.map((x) =>
+                x.date === date
+                  ? { ...x, hours: x.hours + h, start: start ?? x.start ?? firstFree(others, x.hours + h, dayStart) }
+                  : x,
+              )
+            : [...card.slots, { date, hours: h, start: start ?? firstFree(others, h, dayStart) }]
           sfx('drop')
           set({
             cards: mapCard(s.cards, id, (c) => ({
               ...c,
+              touchedAt: now(),
               slots: slots.sort((a, b) => a.date.localeCompare(b.date)),
               status: c.status === 'backlog' ? 'hand' : c.status,
             })),
           })
+        },
+        moveSlot: (id, fromDate, toDate, start) => {
+          const card = get().cards.find((c) => c.id === id)
+          const slot = card?.slots.find((x) => x.date === fromDate)
+          if (!card || !slot) return
+          if (fromDate === toDate) {
+            if (start === undefined || start === slot.start) return
+            sfx('drop')
+            set((s) => ({
+              cards: mapCard(s.cards, id, (c) => ({
+                ...c,
+                touchedAt: now(),
+                slots: c.slots.map((x) => (x.date === fromDate ? { ...x, start } : x)),
+              })),
+            }))
+            return
+          }
+          set((s) => ({ cards: mapCard(s.cards, id, (c) => ({ ...c, slots: c.slots.filter((x) => x.date !== fromDate) })) }))
+          get().schedule(id, toDate, slot.hours, start)
         },
         setSlot: (id, date, hours) =>
           set((s) => ({

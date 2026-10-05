@@ -7,6 +7,7 @@ import type { Card } from '../types'
 import { DraggableCard, Drop } from '../components/Dnd'
 import { capacityFor, daysIn, fmt, horizonRange, iso, today } from '../lib/dates'
 import { priority, unscheduledHours } from '../lib/game'
+import { HourGrid } from './HourGrid'
 
 /** Linse „Kapazität“: Wann arbeite ich woran? Karten auf Tage ziehen = Zeit blocken. */
 export function CalendarView() {
@@ -27,14 +28,14 @@ export function CalendarView() {
     [cards],
   )
 
-  const mode = days.length <= 14 ? 'days' : days.length <= 31 ? 'month' : 'weeks'
+  const mode = days.length <= 7 ? 'hours' : days.length <= 14 ? 'days' : days.length <= 31 ? 'month' : 'weeks'
 
   return (
     <div className="calendar">
       <aside className="tray">
         <div className="tray-head">
           <h3>Ungeplant</h3>
-          <small className="muted">auf einen Tag ziehen</small>
+          <small className="muted">{mode === 'hours' ? 'auf eine Uhrzeit ziehen' : 'auf einen Tag ziehen'}</small>
         </div>
         <div className="tray-list">
           <AnimatePresence mode="popLayout">
@@ -51,7 +52,9 @@ export function CalendarView() {
       </aside>
 
       <div className="cal-main">
-        {mode === 'weeks' ? (
+        {mode === 'hours' ? (
+          <HourGrid days={days} />
+        ) : mode === 'weeks' ? (
           <WeekHeatmap
             onPick={(d) => {
               setHorizon('week')
@@ -235,6 +238,17 @@ function CapacityEditor() {
               />
             </label>
           ))}
+          <label className="sprint-anchor">
+            <span>Arbeitsbeginn (Uhr)</span>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              step={0.5}
+              value={settings.dayStart ?? 9}
+              onChange={(e) => updateSettings({ dayStart: Number(e.target.value) })}
+            />
+          </label>
           <label className="sprint-anchor">
             <span>Sprint-Start (Anker)</span>
             <input type="date" value={settings.sprintAnchor} onChange={(e) => updateSettings({ sprintAnchor: e.target.value })} />
