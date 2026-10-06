@@ -68,30 +68,10 @@ src/
 
 React 19 · TypeScript · Vite · framer-motion (Übergänge) · dnd-kit (Drag & Drop) · zustand · date-fns
 
-## Ideen für die nächsten Runden
+## Vision & Roadmap
 
-**Anbindungen**
-- Kalender (Google/Outlook): belegte Termine reduzieren automatisch die Kapazität; Zeitblöcke werden echte Termine
-- Jira: Issues ↔ Karten, Epics ↔ Projekte, Issue-Links ↔ Abhängigkeiten (Zwei-Wege-Sync)
-- Slack: Nachricht per Emoji-Reaktion zur Karte machen, Daily-Standup posten, Blocker-Pings an Entscheider:innen
-- OKR-Tool: Key Results und Messwerte synchronisieren
-- Browser-Erweiterung / Share-Target: beliebige Seite als Karte mit Link einwerfen
+Questdeck soll zur Steuerzentrale für den Arbeitstag werden: Outlook-Kalender und -Mail, MCP-Anbindungen (Jira, Slack, Miro, Figma, GitHub), KI-Assistenz, Agents und Routinen, Team-Funktionen, sauberes Deployment mit SSO – und eine enge Verzahnung mit dem Wissensgedächtnis MadMemo.
 
-**Spielmechanik**
-- Tages-Quests („3 Karten aus der Hand spielen“), Wochen-Boss = größte offene Karte
-- Combos: Karten desselben Projekts am Stück erledigen → Bonus-XP (belohnt weniger Kontextwechsel)
-- Booster-Pack am Sprintstart: Vorschlag von 5 Karten passend zur freien Kapazität
-- Fokus-Modus: eine Karte groß in der Mitte + Pomodoro-Timer, Zeit wird gegen den Aufwand gebucht
-- Sammelalbum / Trophäen für Meilensteine, Jahresrückblick als „Deck des Jahres“
-
-**Planung**
-- Auto-Planer: verteilt offene Karten nach Priorität, Abhängigkeiten und Kapazität auf die Tage
-- Prognose: wann ist ein Projekt bei aktueller Velocity fertig? Ampel auf der Roadmap
-- Verzögerungen automatisch erkennen (Vorgänger fällig nach Nachfolger) und im Netz markieren
-- Wiederkehrende Karten (z. B. Wochen-Retro), Vorlagen-Decks für typische Projekte
-- Eisenhower-Matrix als weitere Linse (Dringlichkeit × Wichtigkeit)
-
-**Plattform**
-- Sync-Backend & Teams (geteilte Decks, RACI mit echten Personen)
-- PWA/Offline, Desktop-Widget, globale Schnell-Eingabe per Tastenkürzel
-- KI-Assistent: Karte aus Freitext/Mail erzeugen, Aufwand schätzen, Karten zerlegen
+- [docs/VISION.md](docs/VISION.md) – Leitprinzipien, Ausbaustufen, MadMemo-Integration, Zielarchitektur
+- [docs/BACKLOG.md](docs/BACKLOG.md) – Arbeitspakete je Stufe mit IDs und Status
+- [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) – Entscheidungen, die vorher fallen müssen
