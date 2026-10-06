@@ -26,7 +26,28 @@ die einzelne Pakete blockieren, stehen in [Offene Fragen](OPEN_QUESTIONS.md) (`Q
 - [ ] **QD-008** Verzögerungen automatisch erkennen (Vorgänger später fällig als Nachfolger) und im Netz markieren
 - [ ] **QD-009** Sammelalbum und Jahresrückblick („Deck des Jahres“)
 
-## Stufe 1 – Fundament: Server, Login, Datenbank, Deployment
+## Design-Überarbeitung
+
+Aus dem [Design-Review](DESIGN_REVIEW.md) vom 2026-10-06. Reihenfolge-Vorschlag: DS-002, DS-003, DS-001, DS-009 → DS-005, DS-006, DS-007 → DS-016 mit DS-004, DS-008.
+
+- [ ] **DS-001** Icon-Set statt Emoji in Navigation, Labels, Knöpfen und Meldungen
+- [ ] **DS-002** Verläufe und Glows entfernen; ein Akzent, Folie nur für legendäre Karten
+- [ ] **DS-003** Schriftwechsel (Sans mit schmaler Variante + Mono für Zahlen); Mindestgrößen 11/12 px
+- [ ] **DS-004** Karte neu gewichten: Titel, kleineres Bildfeld, Aufwand einmal, Setsymbol, Sammlernummer
+- [ ] **DS-005** Tischkante unten mit Stapeln, Tagesstand und Spielerstand; kein Überdecken mehr
+- [ ] **DS-006** Kopfleiste auf eine Navigationszeile; Zeitraum nur, wo er wirkt; Einstellungen ins Menü
+- [ ] **DS-007** Tastatur: Fokus-Ring, Enter/Leertaste/Pfeile/E auf Karten, KeyboardSensor, Netz per Tab
+- [ ] **DS-008** Dichte-Umschalter Karten / Kompakt / Liste
+- [ ] **DS-009** Textdurchgang: Glossar, Meldungen mit Ergebnis, leere Zustände mit nächster Handlung
+- [ ] **DS-010** Bewegung: kurze Ansichtswechsel, keine Dauerschleifen, `reducedMotion="user"`, Sound standardmäßig aus
+- [ ] **DS-011** Erledigt-Knopf dauerhaft auf der Karte statt nur bei Hover
+- [ ] **DS-012** Kartendetail: häufige Felder oben, Rest einklappbar, Personen als Chips
+- [ ] **DS-013** Spalten ohne Box, Karten als einziges Objekt mit Rand und Schatten
+- [ ] **DS-014** Import/Export-Dialog straffen
+- [ ] **DS-015** Handy: Kompakt als Standard, Navigation unten, schwebende Eingabe
+- [?] **DS-016** Gestalterische Richtung festlegen: A „Sammelkarten, aber echt“ oder B „Karteikasten“ → Q-010
+
+: Server, Login, Datenbank, Deployment
 
 - [?] **DEP-001** Hosting- und Plattform-Entscheidung treffen → Q-001, Q-002
 - [ ] **DEP-002** Backend-Grundgerüst (API, Healthchecks, Konfiguration, Logging)

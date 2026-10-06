@@ -55,3 +55,9 @@ Bei Konflikten (Status in Jira geändert, Karte in Questdeck auch): gewinnt Jira
 **Betrifft:** QD-004
 Reicht eine installierbare PWA für „immer offen“ und globale Tastenkürzel, oder braucht es eine
 Desktop-Hülle (Tauri/Electron) für Systemintegration (Tray, globale Hotkeys, Benachrichtigungen)?
+
+### Q-010 · Welche gestalterische Richtung?
+**Blockiert:** DS-016
+A „Sammelkarten, aber echt“ (gedruckte TCG-Karten, Setsymbole, Sammlernummer, Folie nur für
+Legendäres) oder B „Karteikasten“ (DIN-A7-Karteikarten, Reiter, Stempel, Schreibmaschinen-Zahlen).
+Details im [Design-Review](DESIGN_REVIEW.md#4-gestalterische-richtung).
