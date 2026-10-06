@@ -4,6 +4,7 @@ import { parseISO } from 'date-fns'
 import { useStore } from '../store'
 import { fuzzy, parseCapture } from '../lib/capture'
 import { fmt, horizonRange, inRange } from '../lib/dates'
+import { LEVEL_LABEL, parentLevels as parentLevelsOf } from '../lib/hierarchy'
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9äöüß]/g, '')
 
@@ -16,11 +17,10 @@ export function QuickCapture() {
   const [sel, setSel] = useState(-1)
   const ref = useRef<HTMLInputElement>(null)
   const cards = useStore((s) => s.cards)
-  const projects = useStore((s) => s.projects)
   const horizon = useStore((s) => s.horizon)
   const cursor = useStore((s) => s.cursor)
   const settings = useStore((s) => s.settings)
-  const { addCard, addProject, addChecklist, toast, select } = useStore.getState()
+  const { addCard, addContainer, addChecklist, toast, select } = useStore.getState()
 
   useEffect(() => {
     const h = () => ref.current?.focus()
@@ -29,8 +29,14 @@ export function QuickCapture() {
   }, [])
 
   const parsed = useMemo(() => parseCapture(text), [text])
+  const level = parsed.level ?? 'task'
+  // #name sucht passende Projekte/Initiativen – für ein neues Projekt nur Initiativen
+  const parentLevels = parentLevelsOf(level)
   const project = parsed.project
-    ? projects.find((p) => norm(p.name).startsWith(norm(parsed.project!)))
+    ? cards
+        .filter((c) => parentLevels.includes(c.level) && c.status !== 'done')
+        .sort((a, b) => parentLevels.indexOf(a.level) - parentLevels.indexOf(b.level))
+        .find((p) => norm(p.title).startsWith(norm(parsed.project!)))
     : undefined
   const matches = useMemo(() => {
     const q = parsed.title.trim()
@@ -40,16 +46,32 @@ export function QuickCapture() {
 
   const create = (open: boolean) => {
     if (!parsed.title.trim()) return
-    let projectId = project?.id
-    if (parsed.project && !project) {
-      projectId = addProject({ name: parsed.project.replace(/[-_]/g, ' ') })
-      toast({ icon: '📦', text: `Neues Projekt „${parsed.project}“ angelegt` })
+    let parentId = project?.id
+    if (parsed.project && !project && parentLevels.length) {
+      const newLevel = parentLevels[0] as 'project' | 'roadmap'
+      parentId = addContainer(newLevel, { title: parsed.project.replace(/[-_]/g, ' ') })
+      toast({ icon: newLevel === 'project' ? '📦' : '🧭', text: `Neue${newLevel === 'project' ? 's Projekt' : ' Initiative'} „${parsed.project}“ angelegt` })
+    }
+    if (level !== 'task') {
+      const id = addContainer(level, {
+        title: parsed.title,
+        parentId,
+        urgency: parsed.urgency ?? 3,
+        importance: parsed.importance ?? 3,
+        due: parsed.due,
+        tags: parsed.tags,
+        link: parsed.link,
+      })
+      toast({ icon: level === 'project' ? '🗂️' : '🗺️', text: `${LEVEL_LABEL[level]} „${parsed.title}“ angelegt` })
+      setText('')
+      if (open) select(id)
+      return
     }
     const range = horizonRange(horizon, parseISO(cursor), settings)
     const status = parsed.due && inRange(parsed.due, range) ? 'hand' : 'backlog'
     const id = addCard({
       title: parsed.title,
-      projectId,
+      parentId,
       urgency: parsed.urgency ?? 3,
       importance: parsed.importance ?? 3,
       effortHours: parsed.effortHours ?? 1,
@@ -109,9 +131,10 @@ export function QuickCapture() {
               <b>{parsed.title || '…'}</b>
               {parsed.project && (
                 <span className="chip" style={{ borderColor: project?.color }}>
-                  {project ? `${project.emoji} ${project.name}` : `📦 neu: ${parsed.project}`}
+                  {project ? `${project.emoji} ${project.title}` : `📦 neu: ${parsed.project}`}
                 </span>
               )}
+              {level !== 'task' && <span className="chip on">{LEVEL_LABEL[level]}</span>}
               {parsed.urgency && <span className="chip">⚡ {parsed.urgency}</span>}
               {parsed.importance && <span className="chip">◆ {parsed.importance}</span>}
               {parsed.effortHours && <span className="chip">⏱ {parsed.effortHours} h</span>}

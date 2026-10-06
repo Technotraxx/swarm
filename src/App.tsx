@@ -20,7 +20,7 @@ import { TopBar } from './components/TopBar'
 import { TaskCard } from './components/Card'
 import { DiscardPile, DrawPile, FlightLayer, Toasts } from './components/Piles'
 import { CardDetail } from './components/CardDetail'
-import { HelpModal, IOModal, ProjectEditor } from './components/Modals'
+import { HelpModal, IOModal } from './components/Modals'
 import { BoardView } from './views/BoardView'
 import { ProjectsView } from './views/ProjectsView'
 import { RoadmapView } from './views/RoadmapView'
@@ -52,7 +52,6 @@ const collision: CollisionDetection = (args) => {
 export default function App() {
   const view = useStore((s) => s.view)
   const selected = useStore((s) => s.selected)
-  const editingProject = useStore((s) => s.editingProject)
   const showHelp = useStore((s) => s.showHelp)
   const showIO = useStore((s) => s.showIO)
   const theme = useStore((s) => s.settings.theme)
@@ -121,16 +120,18 @@ export default function App() {
         else st.schedule(card.id, date, undefined, start)
         break
       }
-      case 'project': {
-        const projectId = target === 'none' ? undefined : target
-        if (card.projectId === projectId) return
-        st.updateCard(card.id, { projectId })
-        const p = st.projects.find((x) => x.id === projectId)
-        st.toast({ icon: p?.emoji ?? '🗃️', text: p ? `„${card.title}“ → ${p.name}` : `„${card.title}“ ohne Projekt` })
+      case 'parent': {
+        // Karte unter ein Projekt / eine Initiative legen ("parent:none" löst sie)
+        const parentId = target.startsWith('none') ? undefined : target
+        if (parentId === card.id) return
+        if (st.setParent(card.id, parentId)) {
+          const p = st.cards.find((x) => x.id === parentId)
+          st.toast({ icon: p?.emoji ?? '🗃️', text: p ? `„${card.title}“ → ${p.title}` : `„${card.title}“ hängt jetzt frei` })
+        }
         break
       }
       case 'kr': {
-        st.updateCard(card.id, { krId: target })
+        st.assignKr(card.id, target)
         st.toast({ icon: '🎯', text: `„${card.title}“ zahlt jetzt auf das Key Result ein` })
         break
       }
@@ -177,7 +178,6 @@ export default function App() {
       <FlightLayer />
       <Toasts />
       <AnimatePresence>{selected && <CardDetail key={selected} id={selected} />}</AnimatePresence>
-      <AnimatePresence>{editingProject && <ProjectEditor key={editingProject} id={editingProject} />}</AnimatePresence>
       <AnimatePresence>{showIO && <IOModal />}</AnimatePresence>
       <AnimatePresence>{showHelp && <HelpModal />}</AnimatePresence>
     </DndContext>
@@ -191,7 +191,6 @@ function useKeyboard() {
       const st = useStore.getState()
       if (e.key === 'Escape') {
         if (st.selected) st.select(undefined)
-        else if (st.editingProject) st.editProject(undefined)
         else if (st.showIO) st.toggleIO(false)
         else if (st.showHelp) st.toggleHelp(false)
         return

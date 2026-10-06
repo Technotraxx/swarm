@@ -6,10 +6,11 @@ import type {
   Horizon,
   ID,
   KeyResult,
+  LegacyProject,
   Link,
   LinkType,
   Objective,
-  Project,
+  Level,
   Settings,
   Slot,
   Stats,
@@ -18,6 +19,7 @@ import type {
 import { capacityFor, iso, today } from './lib/dates'
 import { priority, unscheduledHours, xpFor } from './lib/game'
 import { createsCycle } from './lib/graph'
+import { LEVEL_LABEL, canParent, krsOf, migrateLegacy } from './lib/hierarchy'
 import { blocksForDay, dayStartOf, firstFree, fmtHour, planHand } from './lib/schedule'
 import { play } from './lib/sound'
 import { demoData } from './seed'
@@ -45,7 +47,6 @@ export interface Toast {
 export interface Data {
   cards: Card[]
   links: Link[]
-  projects: Project[]
   objectives: Objective[]
   settings: Settings
   stats: Stats
@@ -56,7 +57,6 @@ interface UI {
   horizon: Horizon
   cursor: string
   selected?: ID
-  editingProject?: ID
   flights: Flight[]
   toasts: Toast[]
   pileBump: number
@@ -69,7 +69,6 @@ interface Actions {
   setHorizon: (h: Horizon) => void
   setCursor: (d: string) => void
   select: (id?: ID) => void
-  editProject: (id?: ID) => void
   toggleHelp: (v?: boolean) => void
   toggleIO: (v?: boolean) => void
 
@@ -96,9 +95,12 @@ interface Actions {
   updateLink: (id: ID, patch: Partial<Link>) => void
   removeLink: (id: ID) => void
 
-  addProject: (p?: Partial<Project>) => ID
-  updateProject: (id: ID, patch: Partial<Project>) => void
-  deleteProject: (id: ID) => void
+  /** Neues Projekt bzw. neue Initiative als Karte */
+  addContainer: (level: Exclude<Level, 'task'>, p?: Partial<Card>) => ID
+  /** Karte unter eine andere hängen (oder mit undefined lösen); prüft die erlaubten Ebenen */
+  setParent: (id: ID, parentId?: ID) => boolean
+  /** Key Result zuordnen: Tasks haben genau eins, Projekte/Initiativen mehrere */
+  assignKr: (id: ID, krId: ID) => void
 
   addObjective: (p?: Partial<Objective>) => ID
   updateObjective: (id: ID, patch: Partial<Objective>) => void
@@ -113,7 +115,7 @@ interface Actions {
   dismissToast: (id: string) => void
   landFlight: (id: string) => void
 
-  importData: (d: Partial<Data>, mode: 'replace' | 'merge') => void
+  importData: (d: Partial<Omit<Data, 'cards'>> & { cards?: Partial<Card>[]; projects?: LegacyProject[] }, mode: 'replace' | 'merge') => void
   resetDemo: () => void
   clearAll: () => void
 }
@@ -130,13 +132,15 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 export function newCard(p: Partial<Card> = {}): Card {
+  const level = p.level ?? 'task'
   return {
+    level,
     id: uid(),
     title: 'Neue Karte',
     description: '',
     emoji: '📝',
     motif: Math.floor(Math.random() * 12),
-    effortHours: 2,
+    effortHours: level === 'task' ? 2 : 0,
     urgency: 3,
     importance: 3,
     status: 'backlog',
@@ -173,7 +177,6 @@ export const useStore = create<State>()(
         setHorizon: (horizon) => set({ horizon }),
         setCursor: (cursor) => set({ cursor }),
         select: (selected) => set({ selected }),
-        editProject: (editingProject) => set({ editingProject }),
         toggleHelp: (v) => set((s) => ({ showHelp: v ?? !s.showHelp })),
         toggleIO: (v) => set((s) => ({ showIO: v ?? !s.showIO })),
 
@@ -185,7 +188,9 @@ export const useStore = create<State>()(
         updateCard: (id, patch) => set((s) => ({ cards: mapCard(s.cards, id, (c) => ({ ...c, ...patch })) })),
         deleteCard: (id) =>
           set((s) => ({
-            cards: s.cards.filter((c) => c.id !== id),
+            cards: s.cards
+              .filter((c) => c.id !== id)
+              .map((c) => (c.parentId === id ? { ...c, parentId: s.cards.find((x) => x.id === id)?.parentId } : c)),
             links: s.links.filter((l) => l.from !== id && l.to !== id),
             selected: s.selected === id ? undefined : s.selected,
           })),
@@ -267,7 +272,7 @@ export const useStore = create<State>()(
         reopenCard: (id) =>
           set((s) => ({ cards: mapCard(s.cards, id, (c) => ({ ...c, status: 'hand', doneAt: undefined })) })),
         drawCard: () => {
-          const candidates = get().cards.filter((c) => c.status === 'backlog')
+          const candidates = get().cards.filter((c) => c.status === 'backlog' && c.level === 'task')
           if (!candidates.length) {
             get().toast({ icon: '🂠', text: 'Der Stapel ist leer – Zeit für neue Ideen!' })
             return
@@ -414,29 +419,47 @@ export const useStore = create<State>()(
         updateLink: (id, patch) => set((s) => ({ links: s.links.map((l) => (l.id === id ? { ...l, ...patch } : l)) })),
         removeLink: (id) => set((s) => ({ links: s.links.filter((l) => l.id !== id) })),
 
-        addProject: (p = {}) => {
+        addContainer: (level, p = {}) => {
           const t = today()
-          const project: Project = {
-            id: uid(),
-            name: 'Neues Projekt',
-            emoji: '📦',
+          const card = newCard({
+            level,
+            title: level === 'project' ? 'Neues Projekt' : 'Neue Initiative',
+            emoji: level === 'project' ? '📦' : '🧭',
             color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
-            description: '',
+            status: 'hand',
             start: t,
-            end: iso(addDays(parseISO(t), 42)),
+            due: iso(addDays(parseISO(t), level === 'project' ? 42 : 120)),
             krIds: [],
             ...p,
-          }
-          set((s) => ({ projects: [...s.projects, project] }))
-          return project.id
+          })
+          set((s) => ({ cards: [...s.cards, card] }))
+          return card.id
         },
-        updateProject: (id, patch) =>
-          set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
-        deleteProject: (id) =>
+        setParent: (id, parentId) => {
+          const s = get()
+          const card = s.cards.find((c) => c.id === id)
+          if (!card || card.parentId === parentId) return false
+          if (parentId) {
+            const parent = s.cards.find((c) => c.id === parentId)
+            if (!parent || !canParent(card, parent)) {
+              get().toast({
+                icon: '🚫',
+                text: `${LEVEL_LABEL[card.level]} kann nicht unter ${parent ? `ein${parent.level === 'task' ? 'en Task' : parent.level === 'project' ? ' Projekt' : 'e Initiative'}` : 'diese Karte'}`,
+              })
+              return false
+            }
+          }
+          sfx('drop')
+          set({ cards: mapCard(s.cards, id, (c) => ({ ...c, parentId, touchedAt: now() })) })
+          return true
+        },
+        assignKr: (id, krId) =>
           set((s) => ({
-            projects: s.projects.filter((p) => p.id !== id),
-            cards: s.cards.map((c) => (c.projectId === id ? { ...c, projectId: undefined } : c)),
-            editingProject: undefined,
+            cards: mapCard(s.cards, id, (c) =>
+              c.level === 'task'
+                ? { ...c, krId }
+                : { ...c, krIds: (c.krIds ?? []).includes(krId) ? c.krIds : [...(c.krIds ?? []), krId] },
+            ),
           })),
 
         addObjective: (p = {}) => {
@@ -459,8 +482,11 @@ export const useStore = create<State>()(
             const kr = new Set(s.objectives.find((o) => o.id === id)?.keyResults.map((k) => k.id))
             return {
               objectives: s.objectives.filter((o) => o.id !== id),
-              cards: s.cards.map((c) => (c.krId && kr.has(c.krId) ? { ...c, krId: undefined } : c)),
-              projects: s.projects.map((p) => ({ ...p, krIds: p.krIds.filter((k) => !kr.has(k)) })),
+              cards: s.cards.map((c) => ({
+                ...c,
+                krId: c.krId && kr.has(c.krId) ? undefined : c.krId,
+                krIds: c.krIds?.filter((k) => !kr.has(k)),
+              })),
             }
           }),
         addKeyResult: (objectiveId, title) =>
@@ -479,8 +505,11 @@ export const useStore = create<State>()(
         deleteKeyResult: (krId) =>
           set((s) => ({
             objectives: s.objectives.map((o) => ({ ...o, keyResults: o.keyResults.filter((k) => k.id !== krId) })),
-            cards: s.cards.map((c) => (c.krId === krId ? { ...c, krId: undefined } : c)),
-            projects: s.projects.map((p) => ({ ...p, krIds: p.krIds.filter((k) => k !== krId) })),
+            cards: s.cards.map((c) => ({
+              ...c,
+              krId: c.krId === krId ? undefined : c.krId,
+              krIds: c.krIds?.filter((k) => k !== krId),
+            })),
           })),
 
         updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
@@ -493,13 +522,13 @@ export const useStore = create<State>()(
         dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
         landFlight: (id) => set((s) => ({ flights: s.flights.filter((f) => f.id !== id), pileBump: s.pileBump + 1 })),
 
-        importData: (d, mode) =>
+        importData: (raw, mode) =>
           set((s) => {
+            const d = migrateLegacy(raw)
             if (mode === 'replace') {
               return {
-                cards: (d.cards ?? []).map((c) => newCard(c)),
+                cards: d.cards.map((c) => newCard(c)),
                 links: d.links ?? [],
-                projects: d.projects ?? [],
                 objectives: d.objectives ?? [],
                 settings: { ...DEFAULT_SETTINGS, ...d.settings },
                 stats: d.stats ?? { xp: 0, streak: 0 },
@@ -511,9 +540,8 @@ export const useStore = create<State>()(
               return [...m.values()]
             }
             return {
-              cards: byId(s.cards, d.cards?.map((c) => newCard(c))),
+              cards: byId(s.cards, d.cards.map((c) => newCard(c))),
               links: byId(s.links, d.links),
-              projects: byId(s.projects, d.projects),
               objectives: byId(s.objectives, d.objectives),
             }
           }),
@@ -522,7 +550,6 @@ export const useStore = create<State>()(
           set({
             cards: [],
             links: [],
-            projects: [],
             objectives: [],
             stats: { xp: 0, streak: 0 },
             selected: undefined,
@@ -531,10 +558,19 @@ export const useStore = create<State>()(
     },
     {
       name: 'questdeck-v1',
+      version: 2,
+      // Version 1 → 2: Projekte werden zu Karten der Ebene „Projekt“
+      migrate: (persisted, version) => {
+        const p = persisted as Partial<Data> & { projects?: LegacyProject[] }
+        if (version < 2 && p) {
+          const m = migrateLegacy(p)
+          return { ...m, cards: m.cards.map((c) => newCard(c)) } as unknown as State
+        }
+        return p as State
+      },
       partialize: (s) => ({
         cards: s.cards,
         links: s.links,
-        projects: s.projects,
         objectives: s.objectives,
         settings: s.settings,
         stats: s.stats,
@@ -558,18 +594,13 @@ export function bookedHours(cards: Card[], date: string) {
   return h
 }
 
+/** Fortschritt eines Key Results: alle Tasks, die direkt oder über ihr Projekt/ihre Initiative einzahlen. */
 export function krProgress(krId: ID, cards: Card[], manual?: number) {
-  const mine = cards.filter((c) => c.krId === krId)
+  const map = new Map(cards.map((c) => [c.id, c]))
+  const mine = cards.filter((c) => c.level === 'task' && krsOf(map, c).includes(krId))
   const total = mine.reduce((s, c) => s + c.effortHours, 0)
   const done = mine.filter((c) => c.status === 'done').reduce((s, c) => s + c.effortHours, 0)
   const fromCards = total ? done / total : 0
   if (manual === undefined) return { value: fromCards, cards: mine.length }
   return { value: mine.length ? (fromCards + manual) / 2 : manual, cards: mine.length }
-}
-
-export function projectProgress(projectId: ID, cards: Card[]) {
-  const mine = cards.filter((c) => c.projectId === projectId)
-  const total = mine.reduce((s, c) => s + c.effortHours, 0)
-  const done = mine.filter((c) => c.status === 'done').reduce((s, c) => s + c.effortHours, 0)
-  return { value: total ? done / total : 0, total, done, count: mine.length, open: mine.filter((c) => c.status !== 'done').length }
 }

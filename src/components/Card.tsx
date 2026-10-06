@@ -1,6 +1,8 @@
 import { memo, useRef, type CSSProperties, type ReactNode } from 'react'
 import type { Card as CardT } from '../types'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
+import { LEVEL_LABEL, colorOf, rollup } from '../lib/hierarchy'
 import { MOTIFS, RARITY, checklistProgress, initials, personColor, points, rarity } from '../lib/game'
 import { daysUntil, fmt } from '../lib/dates'
 import { AGE_LABEL, cardAge } from '../lib/schedule'
@@ -33,12 +35,16 @@ export const TaskCard = memo(function TaskCard({
   children,
   onClick,
 }: Props) {
-  const project = useStore((s) => (card.projectId ? s.projects.find((p) => p.id === card.projectId) : undefined))
+  const parent = useStore((s) => (card.parentId ? s.cards.find((c) => c.id === card.parentId) : undefined))
+  const color = useStore((s) => colorOf(s.cards, card))
+  const roll = useStore(useShallow((s) => (card.level === 'task' ? null : rollup(s.cards, card))))
+  const container = card.level !== 'task'
   const ref = useRef<HTMLDivElement>(null)
   const rar = rarity(card)
   const progress = checklistProgress(card)
   const due = card.due ? daysUntil(card.due) : undefined
-  const { age, days } = cardAge(card)
+  const { age, days } = container ? { age: 0 as const, days: 0 } : cardAge(card)
+  const hours = roll ? roll.total : card.effortHours
   const people = [...new Set([...card.raci.r, card.raci.a].filter(Boolean))]
 
   const onMove = (e: React.PointerEvent) => {
@@ -60,8 +66,8 @@ export const TaskCard = memo(function TaskCard({
     <div
       ref={ref}
       data-card-id={card.id}
-      className={`tcg tcg-${size} rar-${rar} ${card.status === 'done' ? 'is-done' : ''} ${blocked ? 'is-blocked' : ''} ${critical ? 'is-critical' : ''} ${dim ? 'is-dim' : ''} age-${age} ${className}`}
-      style={{ '--rar': RARITY[rar].color, '--proj': project?.color ?? 'transparent', ...style } as CSSProperties}
+      className={`tcg tcg-${size} lvl-${card.level} rar-${rar} ${card.status === 'done' ? 'is-done' : ''} ${blocked ? 'is-blocked' : ''} ${critical ? 'is-critical' : ''} ${dim ? 'is-dim' : ''} age-${age} ${className}`}
+      style={{ '--rar': RARITY[rar].color, '--proj': color ?? 'transparent', ...style } as CSSProperties}
       onPointerMove={onMove}
       onPointerLeave={onLeave}
       onClick={onClick}
@@ -71,8 +77,8 @@ export const TaskCard = memo(function TaskCard({
           <span className="tcg-title" title={card.title}>
             {card.title}
           </span>
-          <span className="tcg-mana" title={`Aufwand ${card.effortHours} h`}>
-            {points(card.effortHours)}
+          <span className="tcg-mana" title={container ? `Σ ${hours} h aus ${roll?.count ?? 0} Karten` : `Aufwand ${hours} h`}>
+            {points(hours)}
           </span>
         </header>
 
@@ -82,7 +88,17 @@ export const TaskCard = memo(function TaskCard({
             background: card.imageUrl ? `center/cover url("${card.imageUrl}")` : MOTIFS[card.motif % MOTIFS.length],
           }}
         >
+          {!card.imageUrl && <span className="tcg-pattern" data-p={card.motif % 6} />}
           {!card.imageUrl && <span className="tcg-emoji">{card.emoji}</span>}
+          <span className="tcg-art-hours">
+            {hours}
+            <small>Std</small>
+          </span>
+          <span className="tcg-dots" title={`Dringlichkeit ${card.urgency} von 5`}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <i key={n} className={n <= card.urgency ? 'on' : ''} />
+            ))}
+          </span>
           {due !== undefined && card.status !== 'done' && (
             <span className={`tcg-due ${due < 0 ? 'late' : due <= 1 ? 'soon' : ''}`}>
               {due < 0 ? `${-due} T überfällig` : due === 0 ? 'heute' : due === 1 ? 'morgen' : fmt(card.due!, 'd. MMM')}
@@ -111,12 +127,22 @@ export const TaskCard = memo(function TaskCard({
 
         <div className="tcg-type">
           <span className="tcg-proj-dot" />
-          <span className="ellipsis">{project ? `${project.emoji} ${project.name}` : 'Ohne Projekt'}</span>
-          <span className="tcg-rarity">{RARITY[rar].label}</span>
+          <span className="ellipsis">
+            {parent ? `${container ? 'in ' : ''}${parent.emoji} ${parent.title}` : container ? LEVEL_LABEL[card.level] : 'Ohne Projekt'}
+          </span>
+          <span className="tcg-rarity">{container ? LEVEL_LABEL[card.level] : RARITY[rar].label}</span>
         </div>
 
         <div className="tcg-text">
           {card.description ? <p>{card.description}</p> : null}
+          {roll && roll.count > 0 && (
+            <div className="tcg-progress" title={`${roll.done} von ${roll.total} h erledigt`}>
+              <div style={{ width: `${roll.value * 100}%` }} />
+              <span>
+                {roll.count - roll.open}/{roll.count} Karten · {Math.round(roll.value * 100)} %
+              </span>
+            </div>
+          )}
           {card.checklist.length > 0 && (
             <div className="tcg-progress" title={`${Math.round(progress * 100)} % der Checkliste`}>
               <div style={{ width: `${progress * 100}%` }} />
@@ -125,7 +151,7 @@ export const TaskCard = memo(function TaskCard({
               </span>
             </div>
           )}
-          {!card.description && !card.checklist.length && <p className="muted">{card.effortHours} h Aufwand</p>}
+          {!card.description && !card.checklist.length && !roll?.count && <p className="muted">{hours} h Aufwand</p>}
         </div>
 
         <footer className="tcg-stats">

@@ -1,5 +1,5 @@
 import { addDays, parseISO } from 'date-fns'
-import type { Card, Link, Objective, Project } from './types'
+import type { Card, Link, Objective } from './types'
 import { iso, quarterOf, today } from './lib/dates'
 import type { Data } from './store'
 
@@ -32,39 +32,6 @@ export function demoData(): Data {
     },
   ]
 
-  const projects: Project[] = [
-    {
-      id: 'p1',
-      name: 'Launch Alpha',
-      emoji: '🚀',
-      color: '#7c6cff',
-      description: 'Alles bis zum Public-Beta-Launch.',
-      start: d(-14),
-      end: d(35),
-      krIds: ['kr1', 'kr2'],
-    },
-    {
-      id: 'p2',
-      name: 'Website Relaunch',
-      emoji: '🎨',
-      color: '#ff7a9a',
-      description: 'Neue Landingpage & Messaging.',
-      start: d(-3),
-      end: d(28),
-      krIds: ['kr2'],
-    },
-    {
-      id: 'p3',
-      name: 'Team & Ich',
-      emoji: '🤝',
-      color: '#37c9a6',
-      description: '1:1s, Retros, Weiterbildung.',
-      start: d(-30),
-      end: d(60),
-      krIds: ['kr3', 'kr4'],
-    },
-  ]
-
   const base = { description: '', tags: [], log: [], slots: [], checklist: [], createdAt: new Date().toISOString() }
   const raci = (r: string[] = [], a = '', c: string[] = [], i: string[] = []) => ({ r, a, c, i })
   let order = 0
@@ -76,12 +43,91 @@ export function demoData(): Data {
     urgency: 3,
     importance: 3,
     status: 'backlog',
+    level: 'task',
     raci: raci(),
     order: order++,
     ...p,
   })
 
+  // Ebenen: Initiativen (Roadmap) → Projekte → Tasks
+  const containers: Card[] = [
+    card({
+      id: 'r1',
+      level: 'roadmap',
+      title: 'Markteintritt 2027',
+      emoji: '🧭',
+      motif: 10,
+      color: '#ffb547',
+      description: 'Produkt am Markt etablieren – Beta, Website, Vertrieb.',
+      status: 'hand',
+      effortHours: 0,
+      start: d(-21),
+      due: d(80),
+      krIds: ['kr1'],
+    }),
+    card({
+      id: 'r2',
+      level: 'roadmap',
+      title: 'Gesund wachsen',
+      emoji: '🌱',
+      motif: 2,
+      color: '#4fd18b',
+      description: 'Arbeitsweise, Fokus und Team.',
+      status: 'hand',
+      effortHours: 0,
+      start: d(-30),
+      due: d(90),
+      krIds: ['kr3'],
+    }),
+    card({
+      id: 'p1',
+      level: 'project',
+      parentId: 'r1',
+      title: 'Launch Alpha',
+      emoji: '🚀',
+      motif: 1,
+      color: '#7c6cff',
+      description: 'Alles bis zum Public-Beta-Launch.',
+      status: 'doing',
+      effortHours: 0,
+      start: d(-14),
+      due: d(35),
+      krIds: ['kr1', 'kr2'],
+    }),
+    card({
+      id: 'p2',
+      level: 'project',
+      parentId: 'r1',
+      title: 'Website Relaunch',
+      emoji: '🎨',
+      motif: 0,
+      color: '#ff7a9a',
+      description: 'Neue Landingpage & Messaging.',
+      status: 'hand',
+      effortHours: 0,
+      start: d(-3),
+      due: d(28),
+      krIds: ['kr2'],
+    }),
+    card({
+      id: 'p3',
+      level: 'project',
+      parentId: 'r2',
+      title: 'Team & Ich',
+      emoji: '🤝',
+      motif: 2,
+      color: '#37c9a6',
+      description: '1:1s, Retros, Weiterbildung.',
+      status: 'hand',
+      effortHours: 0,
+      start: d(-30),
+      due: d(60),
+      krIds: ['kr3', 'kr4'],
+    }),
+  ]
+
   const cards: Card[] = [
+    ...containers,
     card({
       id: 'c1',
       title: 'Pricing entscheiden',
@@ -92,7 +138,7 @@ export function demoData(): Data {
       urgency: 5,
       importance: 5,
       status: 'doing',
-      projectId: 'p1',
+      parentId: 'p1',
       krId: 'kr2',
       due: d(1),
       decider: 'Mara Klein',
@@ -113,7 +159,7 @@ export function demoData(): Data {
       urgency: 4,
       importance: 4,
       status: 'hand',
-      projectId: 'p2',
+      parentId: 'p2',
       krId: 'kr2',
       due: d(4),
       link: 'https://example.com/docs/landingpage',
@@ -129,7 +175,7 @@ export function demoData(): Data {
       urgency: 3,
       importance: 5,
       status: 'hand',
-      projectId: 'p1',
+      parentId: 'p1',
       krId: 'kr1',
       due: d(12),
       raci: raci(['Dev-Team'], 'Ich', ['UX'], ['Support']),
@@ -142,7 +188,7 @@ export function demoData(): Data {
       effortHours: 3,
       urgency: 3,
       importance: 4,
-      projectId: 'p1',
+      parentId: 'p1',
       krId: 'kr1',
       due: d(16),
     }),
@@ -155,7 +201,7 @@ export function demoData(): Data {
       effortHours: 5,
       urgency: 2,
       importance: 3,
-      projectId: 'p2',
+      parentId: 'p2',
       due: d(9),
       raci: raci(['Design'], 'Ich', [], []),
     }),
@@ -168,7 +214,7 @@ export function demoData(): Data {
       effortHours: 4,
       urgency: 2,
       importance: 3,
-      projectId: 'p2',
+      parentId: 'p2',
       krId: 'kr2',
     }),
     card({
@@ -180,7 +226,7 @@ export function demoData(): Data {
       urgency: 2,
       importance: 4,
       status: 'hand',
-      projectId: 'p3',
+      parentId: 'p3',
       krId: 'kr4',
       due: d(4),
     }),
@@ -192,7 +238,7 @@ export function demoData(): Data {
       effortHours: 1,
       urgency: 3,
       importance: 3,
-      projectId: 'p3',
+      parentId: 'p3',
       due: d(2),
     }),
     card({
@@ -204,7 +250,7 @@ export function demoData(): Data {
       effortHours: 8,
       urgency: 3,
       importance: 5,
-      projectId: 'p1',
+      parentId: 'p1',
       due: d(20),
       raci: raci(['Security'], 'CTO', ['Ich'], []),
     }),
@@ -217,7 +263,7 @@ export function demoData(): Data {
       urgency: 4,
       importance: 3,
       status: 'done',
-      projectId: 'p1',
+      parentId: 'p1',
       doneAt: new Date(Date.now() - 86400000).toISOString(),
     }),
   ]
@@ -236,7 +282,6 @@ export function demoData(): Data {
   return {
     cards,
     links,
-    projects,
     objectives,
     settings: {
       capacity: [6, 6, 6, 6, 5, 0, 0],

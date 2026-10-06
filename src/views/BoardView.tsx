@@ -8,6 +8,7 @@ import { criticalPath, isBlocked } from '../lib/graph'
 import { priority } from '../lib/game'
 import { horizonRange, inRange } from '../lib/dates'
 import { fuzzy } from '../lib/capture'
+import { ancestorOfLevel, ancestors } from '../lib/hierarchy'
 
 const COLUMNS: { id: Exclude<CardStatus, 'done'>; title: string; icon: string; hint: string }[] = [
   { id: 'backlog', title: 'Stapel', icon: '🂠', hint: 'Ideen & Backlog' },
@@ -19,7 +20,6 @@ const COLUMNS: { id: Exclude<CardStatus, 'done'>; title: string; icon: string; h
 export function BoardView() {
   const cards = useStore((s) => s.cards)
   const links = useStore((s) => s.links)
-  const projects = useStore((s) => s.projects)
   const horizon = useStore((s) => s.horizon)
   const cursor = useStore((s) => s.cursor)
   const settings = useStore((s) => s.settings)
@@ -28,12 +28,15 @@ export function BoardView() {
   const [q, setQ] = useState('')
 
   const map = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
-  const crit = useMemo(() => criticalPath(cards, links), [cards, links])
+  const projects = cards.filter((c) => c.level === 'project' && c.status !== 'done')
+  const tasks = useMemo(() => cards.filter((c) => c.level === 'task'), [cards])
+  const crit = useMemo(() => criticalPath(tasks, links), [tasks, links])
   const range = horizonRange(horizon, parseISO(cursor), settings)
 
   const visible = (c: Card) =>
     c.status !== 'done' &&
-    (!project || c.projectId === project || (project === 'none' && !c.projectId)) &&
+    c.level === 'task' &&
+    (!project || (project === 'none' ? !ancestorOfLevel(map, c, 'project') : ancestors(map, c).some((a) => a.id === project))) &&
     (!q || fuzzy(`${c.title} ${c.description} ${c.tags.join(' ')}`, q)) &&
     (!onlyHorizon || c.status === 'doing' || inRange(c.due, range) || c.slots.some((s) => inRange(s.date, range)))
 
@@ -51,7 +54,7 @@ export function BoardView() {
             style={{ '--c': p.color } as React.CSSProperties}
             onClick={() => setProject(project === p.id ? null : p.id)}
           >
-            {p.emoji} {p.name}
+            {p.emoji} {p.title}
           </button>
         ))}
         <button className={`chip ${project === 'none' ? 'on' : ''}`} onClick={() => setProject('none')}>

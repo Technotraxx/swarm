@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useStore } from '../store'
-import type { Card, ID, Link, LinkType } from '../types'
+import type { Card, ID, Level, Link, LinkType } from '../types'
 import { TaskCard } from '../components/Card'
-import { LINK_TYPES, initials, personColor } from '../lib/game'
+import { LINK_TYPES, initials, personColor, remainingHours } from '../lib/game'
 import { autoLayout, blockers, criticalPath } from '../lib/graph'
+import { LEVEL_LABEL, ancestors, rollup } from '../lib/hierarchy'
 
 const NODE_W = 140 // TaskCard "sm" = 14em × 10px
 const NODE_H = 196
@@ -25,7 +26,6 @@ const roleOf = (c: Card, person: string) => {
 export function GraphView() {
   const cards = useStore((s) => s.cards)
   const links = useStore((s) => s.links)
-  const projects = useStore((s) => s.projects)
   const { updateCard, addLink, updateLink, removeLink, select } = useStore.getState()
 
   const [view, setView] = useState({ x: 0, y: 0, k: 0.9 })
@@ -34,16 +34,27 @@ export function GraphView() {
   const [person, setPerson] = useState('')
   const [showDone, setShowDone] = useState(true)
   const [project, setProject] = useState('')
+  const [levelF, setLevelF] = useState<Level | 'all'>('task')
   const [drag, setDrag] = useState<{ id: ID; x: number; y: number } | null>(null)
   const [wire, setWire] = useState<{ from: ID; x: number; y: number } | null>(null)
   const [edge, setEdge] = useState<ID | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
 
-  const shown = cards.filter((c) => (showDone || c.status !== 'done') && (!project || c.projectId === project))
-  const shownIds = new Set(shown.map((c) => c.id))
   const map = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
-  const layout = useMemo(() => autoLayout(cards, links), [cards, links])
-  const crit = useMemo(() => criticalPath(cards, links), [cards, links])
+  const projects = cards.filter((c) => c.level !== 'task' && c.status !== 'done')
+  const shown = cards.filter(
+    (c) =>
+      (levelF === 'all' || c.level === levelF) &&
+      (showDone || c.status !== 'done') &&
+      (!project || c.id === project || ancestors(map, c).some((a) => a.id === project)),
+  )
+  const shownIds = new Set(shown.map((c) => c.id))
+  const colOffset = (c: Card) => (levelF === 'all' ? { roadmap: 0, project: 1, task: 2 }[c.level] : 0)
+  const layout = autoLayout(shown, links, 260, 200, colOffset)
+  // Projekte/Initiativen zählen mit dem offenen Aufwand ihrer Karten
+  const weight = (c: Card) => (c.level === 'task' ? remainingHours(c) : (({ total, done }) => total - done)(rollup(cards, c)))
+  const crit = criticalPath(shown, links, weight)
+  const tree = levelF === 'all' ? shown.filter((c) => c.parentId && shownIds.has(c.parentId)) : []
   const people = useMemo(
     () => [...new Set(cards.flatMap((c) => [...c.raci.r, c.raci.a, ...c.raci.c, ...c.raci.i, c.decider ?? '']).filter(Boolean))].sort(),
     [cards],
@@ -133,7 +144,7 @@ export function GraphView() {
   }
 
   const arrange = () => {
-    const l = autoLayout(shown, links)
+    const l = autoLayout(shown, links, 260, 200, colOffset)
     for (const c of shown) updateCard(c.id, { pos: l.get(c.id) })
     setView({ x: 20, y: 20, k: 0.8 })
   }
@@ -174,11 +185,20 @@ export function GraphView() {
             ))}
           </select>
         )}
+        <div className="seg small" aria-label="Ebene">
+          {([['task', '🃏 Tasks'], ['project', '🗂️ Projekte'], ['roadmap', '🗺️ Initiativen'], ['all', 'Alle Ebenen']] as [Level | 'all', string][]).map(
+            ([id, label]) => (
+              <button key={id} className={levelF === id ? 'active' : ''} onClick={() => setLevelF(id)}>
+                {label}
+              </button>
+            ),
+          )}
+        </div>
         <select value={project} onChange={(e) => setProject(e.target.value)}>
-          <option value="">Alle Projekte</option>
+          <option value="">Alle Projekte & Initiativen</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.emoji} {p.name}
+              {LEVEL_LABEL[p.level]}: {p.emoji} {p.title}
             </option>
           ))}
         </select>
@@ -218,6 +238,10 @@ export function GraphView() {
                 <path d="M0,0 L10,5 L0,10 z" fill="#ffd36b" />
               </marker>
             </defs>
+            {tree.map((c) => {
+              const { d } = curve(pos(map.get(c.parentId!)!), pos(c))
+              return <path key={`tree-${c.id}`} d={d} className="edge-tree" />
+            })}
             {links
               .filter((l) => shownIds.has(l.from) && shownIds.has(l.to))
               .map((l) => {

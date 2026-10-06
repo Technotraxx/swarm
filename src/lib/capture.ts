@@ -1,5 +1,6 @@
 import { addDays, nextDay, type Day } from 'date-fns'
 import { iso } from './dates'
+import type { Level } from '../types'
 
 export interface Parsed {
   title: string
@@ -10,6 +11,19 @@ export interface Parsed {
   due?: string
   tags: string[]
   link?: string
+  level?: Level
+}
+
+const LEVEL_TOKENS: Record<string, Level> = {
+  t: 'task',
+  task: 'task',
+  p: 'project',
+  projekt: 'project',
+  project: 'project',
+  r: 'roadmap',
+  roadmap: 'roadmap',
+  i: 'roadmap',
+  initiative: 'roadmap',
 }
 
 const WEEKDAYS: Record<string, Day> = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 }
@@ -19,6 +33,7 @@ const WEEKDAYS: Record<string, Day> = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5
  *   "Pitch-Deck bauen #launch !4 ^5 ~3h @fr +design https://figma.com/…"
  *   #projekt   !dringlichkeit (oder !!, !!!)   ^wichtigkeit   ~aufwand (30m, 2h, 1d)
  *   @heute @morgen @mo..@so @12.10. @2026-10-12   +tag   Links werden erkannt
+ *   =projekt / =initiative legt statt eines Tasks ein Projekt bzw. eine Initiative an
  */
 export function parseCapture(input: string, now = new Date()): Parsed {
   const res: Parsed = { title: '', tags: [] }
@@ -28,6 +43,7 @@ export function parseCapture(input: string, now = new Date()): Parsed {
     let m: RegExpMatchArray | null
     if (/^https?:\/\//i.test(tok)) res.link = tok
     else if ((m = tok.match(/^#(.+)$/))) res.project = m[1]
+    else if ((m = tok.match(/^=(\p{L}+)$/u)) && LEVEL_TOKENS[m[1].toLowerCase()]) res.level = LEVEL_TOKENS[m[1].toLowerCase()]
     else if ((m = tok.match(/^!([1-5])$/))) res.urgency = Number(m[1])
     else if ((m = tok.match(/^(!{1,3})$/))) res.urgency = 2 + m[1].length
     else if ((m = tok.match(/^\^([1-5])$/))) res.importance = Number(m[1])

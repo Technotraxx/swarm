@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useCardMap, useStore } from '../store'
-import type { Card, CardStatus, LinkType } from '../types'
+import type { Card, CardStatus, Level, LinkType } from '../types'
 import { TaskCard } from './Card'
 import { ConfirmButton } from './Inline'
 import { EMOJIS, LINK_TYPES, MOTIFS, points, scheduledHours } from '../lib/game'
 import { fmt, today } from '../lib/dates'
 import { blockers } from '../lib/graph'
+import { LEVELS, LEVEL_LABEL, canParent, childrenOf, descendants, isContainer, parentLevels, rollup } from '../lib/hierarchy'
+import { PROJECT_COLORS } from '../store'
 
 const STATUS: { id: CardStatus; label: string }[] = [
   { id: 'backlog', label: 'Stapel' },
@@ -32,7 +34,7 @@ function Pips({ value, onChange, icon }: { value: number; onChange: (v: number) 
 export function CardDetail({ id }: { id: string }) {
   const card = useStore((s) => s.cards.find((c) => c.id === id))
   const map = useCardMap()
-  const projects = useStore((s) => s.projects)
+  const allCards = useStore((s) => s.cards)
   const objectives = useStore((s) => s.objectives)
   const links = useStore((s) => s.links)
   const st = useStore.getState()
@@ -42,6 +44,7 @@ export function CardDetail({ id }: { id: string }) {
   const [linkTarget, setLinkTarget] = useState('')
   const [linkType, setLinkType] = useState<LinkType>('depends')
   const [linkDir, setLinkDir] = useState<'in' | 'out'>('in')
+  const [child, setChild] = useState('')
 
   if (!card) return null
   const up = (patch: Partial<Card>) => st.updateCard(card.id, patch)
@@ -50,6 +53,30 @@ export function CardDetail({ id }: { id: string }) {
   const blocking = blockers(card.id, map, links)
   const others = [...map.values()].filter((c) => c.id !== card.id).sort((a, b) => a.title.localeCompare(b.title))
   const close = () => st.select(undefined)
+  const container = isContainer(card)
+  const kids = childrenOf(allCards, card.id)
+  const roll = rollup(allCards, card)
+  const below = new Set(descendants(allCards, card.id).map((c) => c.id))
+  const parentOptions = allCards
+    .filter((c) => canParent(card, c) && !below.has(c.id) && c.status !== 'done')
+    .sort((a, b) => a.level.localeCompare(b.level) || a.title.localeCompare(b.title))
+  const childLevel: Level = card.level === 'roadmap' ? 'project' : 'task'
+  const changeLevel = (level: Level) => {
+    if (level === card.level) return
+    if (level === 'task' && kids.length) {
+      st.toast({ icon: '🗂️', text: `Erst die ${kids.length} Unterkarten lösen oder verschieben` })
+      return
+    }
+    const parent = card.parentId ? map.get(card.parentId) : undefined
+    up({
+      level,
+      parentId: parent && parentLevels(level).includes(parent.level) ? parent.id : undefined,
+      color: level !== 'task' ? (card.color ?? PROJECT_COLORS[card.motif % PROJECT_COLORS.length]) : card.color,
+      start: level !== 'task' ? (card.start ?? today()) : card.start,
+      krIds: level !== 'task' ? [...new Set([...(card.krIds ?? []), ...(card.krId ? [card.krId] : [])])] : card.krIds,
+      krId: level === 'task' ? (card.krId ?? card.krIds?.[0]) : undefined,
+    })
+  }
 
   return (
     <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
@@ -117,6 +144,53 @@ export function CardDetail({ id }: { id: string }) {
               ))}
             </div>
 
+            <div className="row">
+              <span className="label">Ebene</span>
+              <div className="seg small">
+                {LEVELS.map((l) => (
+                  <button key={l.id} className={card.level === l.id ? 'active' : ''} onClick={() => changeLevel(l.id)}>
+                    {l.icon} {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {container && (
+              <section>
+                <h4>
+                  {card.level === 'project' ? '🃏 Karten im Projekt' : '🗂️ Projekte der Initiative'}{' '}
+                  <small className="muted">
+                    {roll.count - roll.open}/{roll.count} Tasks erledigt · {roll.done}/{roll.total} h · {Math.round(roll.value * 100)} %
+                  </small>
+                </h4>
+                <div className="bar">
+                  <div style={{ width: `${roll.value * 100}%`, background: card.color }} />
+                </div>
+                <ul className="children">
+                  {kids.map((k) => (
+                    <li key={k.id} className={k.status === 'done' ? 'done' : ''} onClick={() => st.select(k.id)}>
+                      <span>{k.status === 'done' ? '✓' : k.emoji}</span>
+                      <b className="grow ellipsis">{k.title}</b>
+                      <small className="muted">
+                        {k.level === 'task' ? `${k.effortHours} h` : `${rollup(allCards, k).total} h`} · {STATUS.find((x) => x.id === k.status)?.label}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+                <input
+                  placeholder={`＋ ${childLevel === 'task' ? 'Karte' : 'Projekt'} hier anlegen (Enter)`}
+                  value={child}
+                  onChange={(e) => setChild(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || !child.trim()) return
+                    if (childLevel === 'task') st.addCard({ title: child.trim(), parentId: card.id, status: 'backlog' })
+                    else st.addContainer('project', { title: child.trim(), parentId: card.id })
+                    setChild('')
+                  }}
+                />
+              </section>
+            )}
+
             <section>
               <h4>Motiv</h4>
               <div className="row">
@@ -156,19 +230,26 @@ export function CardDetail({ id }: { id: string }) {
             </section>
 
             <div className="grid2">
-              <label>
-                <span>
-                  ⏱ Aufwand · {card.effortHours} h = {points(card.effortHours)} Mana
-                </span>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={40}
-                  step={0.5}
-                  value={card.effortHours}
-                  onChange={(e) => up({ effortHours: Number(e.target.value) })}
-                />
-              </label>
+              {container && roll.count > 0 ? (
+                <label>
+                  <span>⏱ Aufwand · Σ {roll.total} h = {points(roll.total)} Mana</span>
+                  <small className="muted">aus den Karten darunter</small>
+                </label>
+              ) : (
+                <label>
+                  <span>
+                    ⏱ {container ? 'Schätzung' : 'Aufwand'} · {card.effortHours} h = {points(card.effortHours)} Mana
+                  </span>
+                  <input
+                    type="range"
+                    min={container ? 0 : 0.5}
+                    max={container ? 200 : 40}
+                    step={container ? 2 : 0.5}
+                    value={card.effortHours}
+                    onChange={(e) => up({ effortHours: Number(e.target.value) })}
+                  />
+                </label>
+              )}
               <label>
                 <span>🔗 Link</span>
                 <input placeholder="https://…" value={card.link ?? ''} onChange={(e) => up({ link: e.target.value || undefined })} />
@@ -181,8 +262,14 @@ export function CardDetail({ id }: { id: string }) {
                 <span>◆ Wichtigkeit</span>
                 <Pips value={card.importance} icon="◆" onChange={(importance) => up({ importance })} />
               </label>
+              {container && (
+                <label>
+                  <span>▶ Start</span>
+                  <input type="date" value={card.start ?? ''} onChange={(e) => up({ start: e.target.value || undefined })} />
+                </label>
+              )}
               <label>
-                <span>🏁 Fällig</span>
+                <span>🏁 {container ? 'Ende' : 'Fällig'}</span>
                 <input type="date" value={card.due ?? ''} onChange={(e) => up({ due: e.target.value || undefined })} />
               </label>
               <label>
@@ -194,32 +281,83 @@ export function CardDetail({ id }: { id: string }) {
                 />
               </label>
               <label>
-                <span>🗂 Projekt</span>
-                <select value={card.projectId ?? ''} onChange={(e) => up({ projectId: e.target.value || undefined })}>
-                  <option value="">— ohne —</option>
-                  {projects.map((p) => (
+                <span>🗂 Gehört zu</span>
+                <select
+                  value={card.parentId ?? ''}
+                  disabled={card.level === 'roadmap'}
+                  onChange={(e) => st.setParent(card.id, e.target.value || undefined)}
+                >
+                  <option value="">{card.level === 'roadmap' ? 'Initiativen sind oben' : '— nichts —'}</option>
+                  {parentOptions.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.emoji} {p.name}
+                      {LEVEL_LABEL[p.level]}: {p.emoji} {p.title}
                     </option>
                   ))}
                 </select>
               </label>
-              <label>
-                <span>🎯 Key Result</span>
-                <select value={card.krId ?? ''} onChange={(e) => up({ krId: e.target.value || undefined })}>
-                  <option value="">— ohne —</option>
-                  {objectives.map((o) => (
-                    <optgroup key={o.id} label={`${o.emoji} ${o.title}`}>
-                      {o.keyResults.map((k) => (
-                        <option key={k.id} value={k.id}>
-                          {k.title}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
+              {!container && (
+                <label>
+                  <span>🎯 Key Result</span>
+                  <select value={card.krId ?? ''} onChange={(e) => up({ krId: e.target.value || undefined })}>
+                    <option value="">— ohne —</option>
+                    {objectives.map((o) => (
+                      <optgroup key={o.id} label={`${o.emoji} ${o.title}`}>
+                        {o.keyResults.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.title}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {container && (
+                <label>
+                  <span>🎨 Farbe</span>
+                  <div className="row wrap">
+                    {PROJECT_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        className={`swatch round ${card.color === c ? 'on' : ''}`}
+                        style={{ background: c }}
+                        onClick={() => up({ color: c })}
+                        aria-label={`Farbe ${c}`}
+                      />
+                    ))}
+                  </div>
+                </label>
+              )}
             </div>
+
+            {container && (
+              <section>
+                <h4>🎯 Zahlt ein auf Key Results <small className="muted">gilt für alle Karten darunter</small></h4>
+                {objectives.map((o) => (
+                  <div key={o.id} className="kr-pick">
+                    <small className="muted">
+                      {o.emoji} {o.title}
+                    </small>
+                    {o.keyResults.map((k) => (
+                      <label key={k.id} className="check">
+                        <input
+                          type="checkbox"
+                          checked={(card.krIds ?? []).includes(k.id)}
+                          onChange={(e) =>
+                            up({
+                              krIds: e.target.checked
+                                ? [...(card.krIds ?? []), k.id]
+                                : (card.krIds ?? []).filter((x) => x !== k.id),
+                            })
+                          }
+                        />
+                        {k.title}
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              </section>
+            )}
 
             <section>
               <h4>

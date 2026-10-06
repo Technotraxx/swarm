@@ -1,9 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { parseISO } from 'date-fns'
-import { PROJECT_COLORS, projectProgress, useStore } from '../store'
-import { EMOJIS } from '../lib/game'
-import { csvToCards, download, exportCSV, exportICS, exportJSON, parseCSV, parseJSON, standupMarkdown } from '../lib/io'
+import { useStore } from '../store'
+import { csvImportCards, csvToCards, download, exportCSV, exportICS, exportJSON, parseCSV, parseJSON, standupMarkdown } from '../lib/io'
 import { ConfirmButton } from './Inline'
 import { horizonLabel, horizonRange, today } from '../lib/dates'
 import { dayStartOf } from '../lib/schedule'
@@ -25,96 +24,6 @@ export function Modal({ onClose, children, wide }: { onClose: () => void; childr
   )
 }
 
-export function ProjectEditor({ id }: { id: string }) {
-  const project = useStore((s) => s.projects.find((p) => p.id === id))
-  const objectives = useStore((s) => s.objectives)
-  const cards = useStore((s) => s.cards)
-  const st = useStore.getState()
-  if (!project) return null
-  const up = (patch: Parameters<typeof st.updateProject>[1]) => st.updateProject(id, patch)
-  const prog = projectProgress(id, cards)
-  const close = () => st.editProject(undefined)
-
-  return (
-    <Modal onClose={close}>
-      <div className="row-between">
-        <h2>
-          {project.emoji} Projekt bearbeiten
-        </h2>
-        <button className="ghost" onClick={close}>
-          ✕
-        </button>
-      </div>
-      <div className="form">
-        <label>
-          <span>Name</span>
-          <input value={project.name} onChange={(e) => up({ name: e.target.value })} autoFocus />
-        </label>
-        <label>
-          <span>Beschreibung / Ziel</span>
-          <textarea rows={2} value={project.description} onChange={(e) => up({ description: e.target.value })} />
-        </label>
-        <div className="row wrap">
-          {EMOJIS.slice(0, 16).map((e) => (
-            <button key={e} className={`emoji-sm ${project.emoji === e ? 'on' : ''}`} onClick={() => up({ emoji: e })}>
-              {e}
-            </button>
-          ))}
-        </div>
-        <div className="row wrap">
-          {PROJECT_COLORS.map((c) => (
-            <button key={c} className={`swatch round ${project.color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => up({ color: c })} />
-          ))}
-          <input type="color" value={project.color.startsWith('#') ? project.color : '#7c6cff'} onChange={(e) => up({ color: e.target.value })} />
-        </div>
-        <div className="grid2">
-          <label>
-            <span>Start</span>
-            <input type="date" value={project.start} onChange={(e) => up({ start: e.target.value })} />
-          </label>
-          <label>
-            <span>Ende</span>
-            <input type="date" value={project.end} onChange={(e) => up({ end: e.target.value })} />
-          </label>
-        </div>
-        <div>
-          <span className="label">Zahlt ein auf Key Results</span>
-          {objectives.map((o) => (
-            <div key={o.id} className="kr-pick">
-              <small className="muted">
-                {o.emoji} {o.title}
-              </small>
-              {o.keyResults.map((k) => (
-                <label key={k.id} className="check">
-                  <input
-                    type="checkbox"
-                    checked={project.krIds.includes(k.id)}
-                    onChange={(e) =>
-                      up({ krIds: e.target.checked ? [...project.krIds, k.id] : project.krIds.filter((x) => x !== k.id) })
-                    }
-                  />
-                  {k.title}
-                </label>
-              ))}
-            </div>
-          ))}
-        </div>
-        <p className="muted">
-          {prog.count} Karten · {prog.done}/{prog.total} h erledigt
-        </p>
-        <div className="row-between">
-          <ConfirmButton ask="Löschen? Karten bleiben" onConfirm={() => st.deleteProject(id)}>
-            Projekt löschen
-          </ConfirmButton>
-          <button className="primary" onClick={close}>
-            Fertig
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
 export function IOModal() {
   const st = useStore.getState()
   const horizon = useStore((s) => s.horizon)
@@ -127,7 +36,7 @@ export function IOModal() {
 
   const data = () => {
     const s = useStore.getState()
-    return { cards: s.cards, links: s.links, projects: s.projects, objectives: s.objectives, settings: s.settings, stats: s.stats }
+    return { cards: s.cards, links: s.links, objectives: s.objectives, settings: s.settings, stats: s.stats }
   }
 
   const onFile = async (f: File) => {
@@ -135,21 +44,10 @@ export function IOModal() {
       const text = await f.text()
       if (f.name.endsWith('.csv')) {
         const rows = csvToCards(parseCSV(text))
-        const projects = [...useStore.getState().projects]
-        for (const r of rows) {
-          let projectId: string | undefined
-          if (r.projectName) {
-            projectId = projects.find((p) => p.name.toLowerCase() === r.projectName!.toLowerCase())?.id
-            if (!projectId) {
-              projectId = st.addProject({ name: r.projectName })
-              projects.push(useStore.getState().projects.find((p) => p.id === projectId)!)
-            }
-          }
-          const { projectName: _ignored, ...card } = r
-          void _ignored
-          st.addCard({ ...card, projectId })
-        }
-        setMsg(`✅ ${rows.length} Karten aus CSV importiert`)
+        const cards = csvImportCards(rows, useStore.getState().cards)
+        st.importData({ cards }, 'merge')
+        const created = cards.length - rows.length
+        setMsg(`✅ ${rows.length} Karten aus CSV importiert${created ? ` · ${created} neue Projekte angelegt` : ''}`)
       } else {
         const d = parseJSON(text)
         st.importData(d, mode)
@@ -182,7 +80,7 @@ export function IOModal() {
         <section className="io-box">
           <h4>Export</h4>
           <button onClick={() => download(`questdeck-${stamp}.json`, exportJSON(data()))}>💾 Komplettes Deck (JSON)</button>
-          <button onClick={() => download(`questdeck-${stamp}.csv`, exportCSV(st.cards, st.projects), 'text/csv')}>📄 Karten als CSV</button>
+          <button onClick={() => download(`questdeck-${stamp}.csv`, exportCSV(useStore.getState().cards), 'text/csv')}>📄 Karten als CSV</button>
           <button onClick={() => download(`questdeck-${stamp}.ics`, exportICS(useStore.getState().cards, dayStartOf(settings)), 'text/calendar')}>
             📅 Zeitblöcke & Fristen (ICS)
           </button>
@@ -290,6 +188,9 @@ export function HelpModal() {
               <code>+tag</code> Tag, Links werden erkannt
             </li>
             <li>
+              <code>=projekt</code> oder <code>=initiative</code> legt statt eines Tasks ein Projekt bzw. eine Initiative an
+            </li>
+            <li>
               Passt der Text zu einer bestehenden Karte, hängt <kbd>Tab</kbd> ihn als ToDo an.
             </li>
           </ul>
@@ -309,6 +210,9 @@ export function HelpModal() {
             <li><b>Stapel</b> = Backlog, <b>Hand</b> = committed, <b>Im Spiel</b> = in Arbeit.</li>
             <li>Karten auf die <b>Ablage</b> ziehen (oder ✓) = erledigt → XP & Serie.</li>
             <li><b>Mana</b> oben rechts = Aufwand, der Rahmen zeigt die Seltenheit.</li>
+            <li>Drei Ebenen wie in Jira: <b>Task</b> → <b>Projekt</b> → <b>Initiative</b>. Projekte und Initiativen sind selbst Karten; ihr Aufwand und Fortschritt rechnet sich aus den Karten darunter.</li>
+            <li>Karte auf ein Projekt-Deck ziehen = zuordnen; Projektkarte auf eine Initiative ziehen = umhängen.</li>
+            <li>Oben rechts wechselst du die Optik: Dunkel, Hell oder <b>Folio</b> (ruhige Papierkarten).</li>
             <li>Im <b>Netz</b> vom ● am Kartenrand auf eine andere Karte ziehen = verbinden.</li>
             <li><b>Hand ziehen</b> füllt heute nach Priorität bis zur Kapazität, Blockiertes bleibt liegen.</li>
             <li>In <b>Kapazität</b> Karten auf eine Uhrzeit ziehen, um Zeit zu blocken; unten am Block ziehen = Dauer.</li>

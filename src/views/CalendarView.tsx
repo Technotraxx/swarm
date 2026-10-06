@@ -9,6 +9,7 @@ import { CapacityButton } from '../components/Inline'
 import { capacityFor, daysIn, fmt, horizonRange, iso, today } from '../lib/dates'
 import { priority, unscheduledHours } from '../lib/game'
 import { HourGrid } from './HourGrid'
+import { colorOf } from '../lib/hierarchy'
 
 /** Linse „Kapazität“: Wann arbeite ich woran? Karten auf Tage ziehen = Zeit blocken. */
 export function CalendarView() {
@@ -24,7 +25,7 @@ export function CalendarView() {
   const tray = useMemo(
     () =>
       cards
-        .filter((c) => c.status !== 'done' && unscheduledHours(c) > 0)
+        .filter((c) => c.level === 'task' && c.status !== 'done' && unscheduledHours(c) > 0)
         .sort((a, b) => priority(b) - priority(a)),
     [cards],
   )
@@ -133,7 +134,7 @@ function SlotChip({ card, date, hours, compact }: { card: Card; date: string; ho
     id: `slot:${card.id}:${date}`,
     data: { card, date },
   })
-  const project = useStore((s) => s.projects.find((p) => p.id === card.projectId))
+  const color = useStore((s) => colorOf(s.cards, card))
   return (
     <motion.div
       layout
@@ -144,7 +145,7 @@ function SlotChip({ card, date, hours, compact }: { card: Card; date: string; ho
       animate={{ opacity: isDragging ? 0.3 : 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
       className={`slot ${card.status === 'done' ? 'done' : ''}`}
-      style={{ '--c': project?.color ?? 'var(--accent)', minHeight: compact ? undefined : `${Math.max(1, hours) * 18}px` } as React.CSSProperties}
+      style={{ '--c': color ?? 'var(--accent)', minHeight: compact ? undefined : `${Math.max(1, hours) * 18}px` } as React.CSSProperties}
       onClick={() => select(card.id)}
     >
       <span className="slot-emoji">{card.emoji}</span>

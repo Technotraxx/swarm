@@ -1,5 +1,8 @@
 export type ID = string
 
+/** Flughöhe einer Karte – wie Story, Epic und Initiative in Jira */
+export type Level = 'task' | 'project' | 'roadmap'
+
 /** Wo liegt die Karte auf dem Tisch? */
 export type CardStatus = 'backlog' | 'hand' | 'doing' | 'done'
 
@@ -52,8 +55,17 @@ export interface Card {
   urgency: number // 1..5
   importance: number // 1..5
   status: CardStatus
-  projectId?: ID
+  level: Level
+  /** Übergeordnete Karte: Task → Projekt (oder direkt Initiative), Projekt → Initiative */
+  parentId?: ID
+  /** Key Result, auf das die Karte einzahlt (Tasks) */
   krId?: ID
+  /** Key Results eines Projekts oder einer Initiative – gelten für alle Karten darunter */
+  krIds?: ID[]
+  /** Farbe eines Projekts/einer Initiative; Tasks erben sie von oben */
+  color?: string
+  /** Start eines Projekts/einer Initiative auf der Roadmap; das Ende ist `due` */
+  start?: string
   due?: string // yyyy-MM-dd
   slots: Slot[]
   tags: string[]
@@ -79,7 +91,8 @@ export interface Link {
   note?: string
 }
 
-export interface Project {
+/** Nur noch für den Import alter Daten (vor Version 2 waren Projekte eigene Objekte) */
+export interface LegacyProject {
   id: ID
   name: string
   emoji: string
@@ -88,7 +101,6 @@ export interface Project {
   start: string
   end: string
   krIds: ID[]
-  archived?: boolean
 }
 
 export interface KeyResult {
@@ -110,6 +122,8 @@ export type Horizon = 'day' | 'week' | 'sprint' | 'month' | 'quarter' | 'year'
 
 export type ViewId = 'board' | 'projects' | 'roadmap' | 'graph' | 'calendar' | 'okr'
 
+export type Theme = 'dark' | 'light' | 'folio'
+
 export interface Settings {
   /** Kapazität in Stunden je Wochentag, Index 0 = Montag */
   capacity: number[]
@@ -118,7 +132,7 @@ export interface Settings {
   sprintAnchor: string // Startdatum eines Sprints, von dem aus 2-Wochen-Sprints gezählt werden
   /** Arbeitsbeginn in Stunden; die Tageskapazität zählt ab hier */
   dayStart?: number
-  theme: 'dark' | 'light'
+  theme: Theme
   sound: boolean
 }
 

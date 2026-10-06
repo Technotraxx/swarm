@@ -93,7 +93,7 @@ export function planHand(
   let skippedBlocked = 0
 
   const candidates = cards
-    .filter((c) => (c.status === 'backlog' || c.status === 'hand' || c.status === 'doing') && !c.slots.some((s) => s.date === date))
+    .filter((c) => c.level === 'task' && (c.status === 'backlog' || c.status === 'hand' || c.status === 'doing') && !c.slots.some((s) => s.date === date))
     .sort((a, b) => Number(b.status === 'doing') - Number(a.status === 'doing') || priority(b) - priority(a))
 
   for (const c of candidates) {

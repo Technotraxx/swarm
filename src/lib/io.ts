@@ -1,5 +1,6 @@
-import type { Card, Project } from '../types'
+import type { Card } from '../types'
 import type { Data } from '../store'
+import type { LegacyProject } from '../types'
 import { fmt, inRange, type Range } from './dates'
 import { points } from './game'
 import { blocksForDay } from './schedule'
@@ -10,7 +11,8 @@ export function exportJSON(d: Data): string {
   return JSON.stringify({ schema: SCHEMA, exportedAt: new Date().toISOString(), ...d }, null, 2)
 }
 
-export function parseJSON(text: string): Partial<Data> {
+/** Liest ein exportiertes Deck – auch alte Exporte mit separaten Projekten (die Umwandlung macht der Store). */
+export function parseJSON(text: string): Partial<Data> & { projects?: LegacyProject[] } {
   const raw = JSON.parse(text)
   if (!raw || typeof raw !== 'object') throw new Error('Keine gültige JSON-Datei')
   if (!Array.isArray(raw.cards)) throw new Error('Datei enthält keine Karten (cards)')
@@ -26,17 +28,17 @@ export function parseJSON(text: string): Partial<Data> {
 
 /* ---------------- CSV ---------------- */
 
-const CSV_COLS = ['title', 'description', 'status', 'effortHours', 'urgency', 'importance', 'due', 'project', 'tags', 'link'] as const
+const CSV_COLS = ['title', 'level', 'description', 'status', 'effortHours', 'urgency', 'importance', 'due', 'project', 'tags', 'link'] as const
 
 const esc = (v: unknown) => {
   const s = v === undefined || v === null ? '' : String(v)
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export function exportCSV(cards: Card[], projects: Project[]): string {
-  const pname = new Map(projects.map((p) => [p.id, p.name]))
+export function exportCSV(cards: Card[]): string {
+  const title = new Map(cards.map((c) => [c.id, c.title]))
   const rows = cards.map((c) =>
-    [c.title, c.description, c.status, c.effortHours, c.urgency, c.importance, c.due, c.projectId ? pname.get(c.projectId) : '', c.tags.join('|'), c.link]
+    [c.title, c.level, c.description, c.status, c.effortHours, c.urgency, c.importance, c.due, c.parentId ? title.get(c.parentId) : '', c.tags.join('|'), c.link]
       .map(esc)
       .join(','),
   )
@@ -82,7 +84,8 @@ const ALIASES: Record<string, string[]> = {
   urgency: ['urgency', 'dringlichkeit', 'priority', 'priorität'],
   importance: ['importance', 'wichtigkeit'],
   due: ['due', 'fällig', 'due date', 'deadline', 'faellig'],
-  project: ['project', 'projekt', 'epic'],
+  project: ['project', 'projekt', 'parent', 'epic', 'epic link', 'initiative'],
+  level: ['level', 'ebene', 'issue type', 'type', 'typ'],
   tags: ['tags', 'labels'],
   link: ['link', 'url'],
 }
@@ -90,6 +93,20 @@ const ALIASES: Record<string, string[]> = {
 const pick = (r: Record<string, string>, key: string) => {
   for (const a of ALIASES[key]) if (r[a] !== undefined && r[a] !== '') return r[a]
   return undefined
+}
+
+const LEVEL: Record<string, Card['level']> = {
+  task: 'task',
+  story: 'task',
+  bug: 'task',
+  'sub-task': 'task',
+  subtask: 'task',
+  aufgabe: 'task',
+  project: 'project',
+  projekt: 'project',
+  epic: 'project',
+  roadmap: 'roadmap',
+  initiative: 'roadmap',
 }
 
 const PRIO: Record<string, number> = { highest: 5, high: 4, medium: 3, low: 2, lowest: 1, hoch: 4, mittel: 3, niedrig: 2 }
@@ -117,11 +134,13 @@ export function csvToCards(rows: Record<string, string>[]): (Partial<Card> & { p
     .map((r) => {
       const due = pick(r, 'due')
       const iso = due?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? due?.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/)?.slice(1).reverse().map((x) => x.padStart(2, '0')).join('-')
+      const level = LEVEL[(pick(r, 'level') ?? '').toLowerCase()] ?? 'task'
       return {
         title: pick(r, 'title')!,
+        level,
         description: pick(r, 'description') ?? '',
         status: STATUS[(pick(r, 'status') ?? '').toLowerCase()] ?? 'backlog',
-        effortHours: num(pick(r, 'effortHours'), 2),
+        effortHours: num(pick(r, 'effortHours'), level === 'task' ? 2 : 0),
         urgency: clamp(num(pick(r, 'urgency'), 3)),
         importance: clamp(num(pick(r, 'importance'), 3)),
         due: iso,
@@ -130,6 +149,31 @@ export function csvToCards(rows: Record<string, string>[]): (Partial<Card> & { p
         link: pick(r, 'link'),
       }
     })
+}
+
+const rid = () => Math.random().toString(36).slice(2, 10)
+
+/**
+ * Hängt importierte Zeilen an ihre Eltern: Spalte „Projekt/Epic“ wird mit vorhandenen
+ * oder in derselben Datei importierten Projekten/Initiativen abgeglichen (nach Titel);
+ * unbekannte Namen werden als neues Projekt angelegt.
+ */
+export function csvImportCards(rows: ReturnType<typeof csvToCards>, existing: Card[]): Partial<Card>[] {
+  const out: Partial<Card>[] = rows.map(({ projectName: _p, ...c }) => (void _p, { ...c, id: rid() }))
+  const containers = new Map<string, Partial<Card>>()
+  for (const c of [...existing, ...out]) if (c.level !== 'task' && c.title) containers.set(c.title.toLowerCase(), c)
+  rows.forEach((r, i) => {
+    if (!r.projectName) return
+    const key = r.projectName.toLowerCase()
+    let parent = containers.get(key)
+    if (!parent) {
+      parent = { id: rid(), level: 'project', title: r.projectName, emoji: '📦', status: 'hand', effortHours: 0, krIds: [] }
+      containers.set(key, parent)
+      out.push(parent)
+    }
+    if (parent.id !== out[i].id) out[i].parentId = parent.id
+  })
+  return out
 }
 
 /* ---------------- Kalender (ICS) ---------------- */

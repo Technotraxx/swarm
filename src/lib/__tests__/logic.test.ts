@@ -3,9 +3,10 @@ import { parseCapture } from '../capture'
 import { criticalPath, createsCycle, isBlocked } from '../graph'
 import { horizonRange, sprintRange } from '../dates'
 import { level, points } from '../game'
-import { csvToCards, parseCSV } from '../io'
+import { csvImportCards, csvToCards, parseCSV } from '../io'
+import { canParent, colorOf, krsOf, migrateLegacy, rollup } from '../hierarchy'
 import { blocksForDay, cardAge, firstFree, lanes, planHand } from '../schedule'
-import { newCard } from '../../store'
+import { krProgress, newCard } from '../../store'
 import type { Link } from '../../types'
 
 const now = new Date(2026, 9, 5) // Montag, 5. Okt. 2026
@@ -149,5 +150,65 @@ describe('Alterung', () => {
   it('Anfassen und „Im Spiel“ setzen die Uhr zurück', () => {
     expect(cardAge({ status: 'backlog', createdAt: '2026-09-01', touchedAt: '2026-10-29T00:00:00Z' }, now).age).toBe(0)
     expect(cardAge({ status: 'doing', createdAt: '2026-09-01' }, now).age).toBe(0)
+  })
+})
+
+describe('Ebenen (Task → Projekt → Initiative)', () => {
+  const ini = newCard({ id: 'r', level: 'roadmap', effortHours: 0, krIds: ['krA'] })
+  const proj = newCard({ id: 'p', level: 'project', parentId: 'r', effortHours: 0, krIds: ['krB'] })
+  const t1 = newCard({ id: 't1', parentId: 'p', effortHours: 3, status: 'done' })
+  const t2 = newCard({ id: 't2', parentId: 'p', effortHours: 1 })
+  const all = [ini, proj, t1, t2]
+
+  it('rechnet Aufwand und Fortschritt nach oben zusammen', () => {
+    expect(rollup(all, proj)).toMatchObject({ total: 4, done: 3, value: 0.75, count: 2, open: 1 })
+    expect(rollup(all, ini)).toMatchObject({ total: 4, done: 3, count: 2 })
+  })
+  it('erlaubt nur sinnvolle Eltern', () => {
+    expect(canParent(t2, proj)).toBe(true)
+    expect(canParent(t2, ini)).toBe(true)
+    expect(canParent(proj, ini)).toBe(true)
+    expect(canParent(ini, proj)).toBe(false)
+    expect(canParent(proj, t1)).toBe(false)
+  })
+  it('vererbt Key Results und Farbe nach unten', () => {
+    expect(krsOf(all, t2).sort()).toEqual(['krA', 'krB'])
+    expect(colorOf(all, t2)).toBeUndefined()
+    expect(colorOf([{ ...ini, color: '#abc' }, proj, t2], t2)).toBe('#abc')
+  })
+  it('zählt KR-Fortschritt über das Projekt mit', () => {
+    expect(krProgress('krB', all).value).toBe(0.75)
+  })
+  it('wandelt alte Projekte in Projektkarten um', () => {
+    const m = migrateLegacy({
+      cards: [{ id: 'x', title: 'Alt', projectId: 'p9' }],
+      projects: [{ id: 'p9', name: 'Altes Projekt', emoji: '📦', color: '#123', description: '', start: '2026-01-01', end: '2026-02-01', krIds: ['k'] }],
+    })
+    expect(m.cards).toEqual([
+      expect.objectContaining({ id: 'x', level: 'task', parentId: 'p9' }),
+      expect.objectContaining({ id: 'p9', level: 'project', title: 'Altes Projekt', due: '2026-02-01', krIds: ['k'] }),
+    ])
+    expect('projects' in m).toBe(false)
+  })
+})
+
+describe('Schnell-Eingabe mit Ebene', () => {
+  it('=projekt und =initiative setzen die Ebene', () => {
+    expect(parseCapture('Website =projekt #markt', now)).toMatchObject({ title: 'Website', level: 'project', project: 'markt' })
+    expect(parseCapture('Markteintritt =i', now).level).toBe('roadmap')
+    expect(parseCapture('a=b bleibt', now).title).toBe('a=b bleibt')
+  })
+})
+
+describe('CSV mit Epics', () => {
+  it('hängt Zeilen an vorhandene oder neue Projekte', () => {
+    const rows = csvToCards(parseCSV('Summary,Issue Type,Epic Link\nLogin,Story,Auth\nAuth,Epic,\nAPI,Task,Neu'))
+    const out = csvImportCards(rows, [])
+    const auth = out.find((c) => c.title === 'Auth')!
+    expect(auth.level).toBe('project')
+    expect(out.find((c) => c.title === 'Login')!.parentId).toBe(auth.id)
+    const neu = out.find((c) => c.title === 'Neu')!
+    expect(neu.level).toBe('project')
+    expect(out.find((c) => c.title === 'API')!.parentId).toBe(neu.id)
   })
 })

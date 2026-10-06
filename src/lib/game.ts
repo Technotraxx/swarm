@@ -21,7 +21,10 @@ export const RARITY: Record<Rarity, { label: string; color: string }> = {
   legendary: { label: 'Legendär', color: '#ffb547' },
 }
 
-export function rarity(card: Pick<Card, 'effortHours' | 'importance'>): Rarity {
+export function rarity(card: Pick<Card, 'effortHours' | 'importance'> & Partial<Pick<Card, 'level'>>): Rarity {
+  // Projekte und Initiativen tragen immer die Rahmen der höchsten Stufen
+  if (card.level === 'project') return 'epic'
+  if (card.level === 'roadmap') return 'legendary'
   const p = points(card.effortHours) + (card.importance >= 5 ? 3 : card.importance >= 4 ? 1 : 0)
   if (p >= 13) return 'legendary'
   if (p >= 8) return 'epic'

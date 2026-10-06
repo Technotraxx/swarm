@@ -20,7 +20,11 @@ export function isBlocked(cardId: ID, cards: Map<ID, Card>, links: Link[]) {
  * Critical Path: längste Kette (nach Rest-Aufwand) offener Karten über ordnende Links.
  * Zyklen werden ignoriert (die betroffene Kante wird übersprungen).
  */
-export function criticalPath(cards: Card[], links: Link[]): { cards: Set<ID>; links: Set<ID>; hours: number } {
+export function criticalPath(
+  cards: Card[],
+  links: Link[],
+  weight: (c: Card) => number = remainingHours,
+): { cards: Set<ID>; links: Set<ID>; hours: number } {
   const open = new Map(cards.filter((c) => c.status !== 'done').map((c) => [c.id, c]))
   const out = new Map<ID, Link[]>()
   for (const l of links) {
@@ -36,7 +40,7 @@ export function criticalPath(cards: Card[], links: Link[]): { cards: Set<ID>; li
     const m = memo.get(id)
     if (m) return m.len
     visiting.add(id)
-    const own = remainingHours(open.get(id)!)
+    const own = weight(open.get(id)!)
     let best = 0
     let next: Link | undefined
     for (const l of out.get(id) ?? []) {
@@ -101,13 +105,13 @@ export function depthMap(cards: Card[], links: Link[]): Map<ID, number> {
   return depth
 }
 
-export function autoLayout(cards: Card[], links: Link[], colW = 260, rowH = 200) {
+export function autoLayout(cards: Card[], links: Link[], colW = 260, rowH = 200, colOffset: (c: Card) => number = () => 0) {
   const depth = depthMap(cards, links)
   const rows = new Map<number, number>()
   const pos = new Map<ID, { x: number; y: number }>()
-  const sorted = [...cards].sort((a, b) => (a.projectId ?? '').localeCompare(b.projectId ?? '') || a.order - b.order)
+  const sorted = [...cards].sort((a, b) => (a.parentId ?? '').localeCompare(b.parentId ?? '') || a.order - b.order)
   for (const c of sorted) {
-    const col = depth.get(c.id) ?? 0
+    const col = colOffset(c) + (depth.get(c.id) ?? 0)
     const row = rows.get(col) ?? 0
     rows.set(col, row + 1)
     pos.set(c.id, { x: 60 + col * colW, y: 60 + row * rowH })

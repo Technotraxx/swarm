@@ -1,15 +1,19 @@
 import { motion } from 'framer-motion'
 import { parseISO } from 'date-fns'
 import { bookedHours, useStore } from '../store'
-import type { ViewId } from '../types'
+import type { Theme, ViewId } from '../types'
 import { HORIZONS, capacityFor, daysIn, horizonLabel, horizonRange, inRange, iso, shiftCursor, today } from '../lib/dates'
 import { level } from '../lib/game'
 import { QuickCapture } from './QuickCapture'
 
+const NEXT_THEME: Record<Theme, Theme> = { dark: 'light', light: 'folio', folio: 'dark' }
+const THEME_LABEL: Record<Theme, string> = { dark: 'Dunkel', light: 'Hell', folio: 'Folio (ruhig)' }
+const THEME_ICON: Record<Theme, string> = { dark: '🌙', light: '☀️', folio: '📜' }
+
 export const LEVELS: { id: ViewId; label: string; icon: string; hint: string }[] = [
   { id: 'board', label: 'Task', icon: '🃏', hint: 'Tisch mit Stapel, Hand & Spielfeld' },
-  { id: 'projects', label: 'Projekt', icon: '🗂️', hint: 'Karten als Projekt-Decks' },
-  { id: 'roadmap', label: 'Roadmap', icon: '🗺️', hint: 'Projekte & Meilensteine auf der Zeitachse' },
+  { id: 'projects', label: 'Projekt', icon: '🗂️', hint: 'Projekte als Decks, gruppiert nach Initiativen' },
+  { id: 'roadmap', label: 'Roadmap', icon: '🗺️', hint: 'Initiativen, Projekte & Meilensteine auf der Zeitachse' },
 ]
 export const LENSES: { id: ViewId; label: string; icon: string; hint: string }[] = [
   { id: 'graph', label: 'Netz', icon: '🕸️', hint: 'Abhängigkeiten, Critical Path, Blocker, RACI' },
@@ -82,8 +86,11 @@ export function TopBar() {
           <button onClick={() => updateSettings({ sound: !settings.sound })} title="Sound">
             {settings.sound ? '🔊' : '🔈'}
           </button>
-          <button onClick={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })} title="Hell/Dunkel">
-            {settings.theme === 'dark' ? '☀️' : '🌙'}
+          <button
+            onClick={() => updateSettings({ theme: NEXT_THEME[settings.theme] ?? 'dark' })}
+            title={`Optik: ${THEME_LABEL[settings.theme]} → ${THEME_LABEL[NEXT_THEME[settings.theme] ?? 'dark']}`}
+          >
+            {THEME_ICON[NEXT_THEME[settings.theme] ?? 'dark']}
           </button>
           <button onClick={() => toggleHelp(true)} title="Hilfe & Tastenkürzel (?)">?</button>
         </div>

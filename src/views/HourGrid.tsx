@@ -4,6 +4,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { useStore } from '../store'
 import type { Card } from '../types'
 import { Drop } from '../components/Dnd'
+import { colorOf } from '../lib/hierarchy'
 import { CapacityButton } from '../components/Inline'
 import { capacityFor, fmt, today } from '../lib/dates'
 import { blocksForDay, dayStartOf, fmtHour, lanes, type Block } from '../lib/schedule'
@@ -151,7 +152,7 @@ function useNowHour() {
 
 function SlotBlock({ card, block, from, lane, of }: { card: Card; block: Block; from: number; lane: number; of: number }) {
   const { setSlot, select, completeCard } = useStore.getState()
-  const project = useStore((s) => s.projects.find((p) => p.id === card.projectId))
+  const color = useStore((s) => colorOf(s.cards, card))
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
     id: `slot:${card.id}:${block.date}`,
     data: { card, date: block.date, start: block.start },
@@ -194,7 +195,7 @@ function SlotBlock({ card, block, from, lane, of }: { card: Card; block: Block; 
           height: hours * HOUR_PX - 2,
           left: `calc(${(lane / of) * 100}% + 2px)`,
           width: `calc(${100 / of}% - 4px)`,
-          '--c': project?.color ?? 'var(--accent)',
+          '--c': color ?? 'var(--accent)',
         } as React.CSSProperties
       }
       onClick={() => select(card.id)}
